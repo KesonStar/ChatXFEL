@@ -13,7 +13,7 @@ import time
 from itertools import chain
 from datetime import datetime
 from tqdm import tqdm
-from src import rag, utils
+from . import rag, utils
 from pymilvus import (FieldSchema, CollectionSchema, DataType,
                       Collection, connections)
 from pymilvus import MilvusClient
