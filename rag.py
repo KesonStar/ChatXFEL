@@ -26,6 +26,9 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from transformers import AutoTokenizer
 from langchain_community.chat_models import ChatOllama
 
+from query_rewriter import rewrite_query
+import torch
+
 sys.path.append('/home/zhangxf/workdir/LLM/llm-shine/ChatXFEL/src')
 import utils
 
@@ -111,7 +114,8 @@ def split(docs, size=2000, overlap=200, length_func=len, sep=None, is_regex=Fals
 
 def get_embedding_bge(model_kwargs=None, encode_kwargs=None):
     if model_kwargs is None:
-        model_kwargs = {'device':'mps'}
+        device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+        model_kwargs = {'device':device}
     if encode_kwargs is None:
         encode_kwargs = {'normalize_embeddings':True}
     model_name = 'BAAI/bge-m3'
@@ -258,7 +262,44 @@ def get_contextualize_question(llm, history_prompt_template, input_: dict):
         history_context = input_['question']
     return history_context
 
-def retrieve_generate(question, llm, prompt, retriever, history=None, return_source=True, return_chain=False):
+def retrieve_generate(question, llm, prompt, retriever, history=None, return_source=True, return_chain=False, use_query_rewrite=False):
+    """
+    question
+        │
+        ▼
+    Retriever (检索 Milvus 文献 chunks)
+        │
+        ▼
+    文献 chunks + 原始 question 打包成一个 dict
+        │
+        ▼
+    RunnablePassthrough.assign(context=format_docs())
+    （把文献列表转换成一大段文本）
+        │
+        ▼
+    prompt （把 context 和 question 放进 prompt 模板）
+        │
+        ▼
+    LLM (Ollama)
+        │
+        ▼
+    StrOutputParser （把 LLM 输出变成字符串）
+        │
+        ▼
+    最终返回 answer
+
+    """
+    
+    # use_query_rewrite logic
+    original_question = question
+    if use_query_rewrite:
+        try:
+            rewritten = rewrite_query(llm, original_question, history)
+            question = rewritten
+        except Exception as e:
+            print("Query rewrite failed, using original question.", e)
+            question = original_question
+
     if return_source:
         rag_source = (RunnablePassthrough.assign(
             context=(lambda x: utils.format_docs(x['context'])))

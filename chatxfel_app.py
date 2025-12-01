@@ -114,6 +114,10 @@ with st.sidebar:
             msg = '''When enabled, the model will see previous conversation turns to provide context-aware responses.
             This helps with follow-up questions and references to previous answers.'''
             st.markdown(msg)
+
+    # button to Enable Query Rewrite
+    use_query_rewrite = st.sidebar.checkbox('Enable Query Rewrite', key='query_rewrite', value=True)
+
     enable_log = st.sidebar.checkbox('Enable log', key='log', value=True)
     use_monog = False
     if enable_log:
@@ -316,7 +320,8 @@ def generate_llama2_response(question, use_history=False):
             retriever=retriever,
             history=history_text,
             return_source=return_source,
-            return_chain=False
+            return_chain=False,
+            use_query_rewrite=use_query_rewrite
         )
     else:
         output = rag.retrieve_generate(
@@ -325,7 +330,8 @@ def generate_llama2_response(question, use_history=False):
             prompt=prompt,
             retriever=retriever,
             return_source=return_source,
-            return_chain=False
+            return_chain=False,
+            use_query_rewrite=use_query_rewrite
         )
 
     return output
