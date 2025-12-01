@@ -104,17 +104,23 @@ with st.sidebar:
     #        for word in words:
     #            keywords.append(word.strip().lower())
 
-    n_batch, n_ctx, max_tokens = 512, 8192, 8192 
+    n_batch, n_ctx, max_tokens = 512, 8192, 8192
     #return_source = st.sidebar.checkbox('Return Source', key='source', value=True)
     return_source = True
     use_mongo = True
+    enable_chat_history = st.sidebar.checkbox('Enable chat history', key='chat_history', value=True)
+    if enable_chat_history:
+        with st.popover(':information_source: About chat history'):
+            msg = '''When enabled, the model will see previous conversation turns to provide context-aware responses.
+            This helps with follow-up questions and references to previous answers.'''
+            st.markdown(msg)
     enable_log = st.sidebar.checkbox('Enable log', key='log', value=True)
     use_monog = False
     if enable_log:
         with st.popover(':warning: :red[About the log]'):
-            msg = '''All the questions, answers, retrieved documents, and the question time will be logged. 
+            msg = '''All the questions, answers, retrieved documents, and the question time will be logged.
             The logs would only be used for the development of ChatXFEL. \n\nIf you don't like the log, just uncheck the box "Enable log" above.
-            \n\n**Your IP address will always be recorded.**''' 
+            \n\n**Your IP address will always be recorded.**'''
             st.markdown(msg)
 
 @st.cache_resource
@@ -147,14 +153,21 @@ llm = get_llm(model_name=selected_model, num_predict=2048, keep_alive=-1)
 
 #You should answer the question in detail as far as possible. Do not make up questions by yourself.
 #If you cannot find anwser in the context, just say that you don't know, don't try to make up an answer.
-#Please remember some common abbrevations: SFX is short for serial femtosecond crystallography, SPI is 
-#short for single particle imaging. 
+#Please remember some common abbrevations: SFX is short for serial femtosecond crystallography, SPI is
+#short for single particle imaging.
 #
 #{context}
 #
 #Question: {question}
 #Helpful Answer:"""
-with open('prompts/naive.pt', 'r') as f:
+
+# Load appropriate prompt template based on chat history setting
+if enable_chat_history:
+    prompt_file = 'prompts/chat_with_history.pt'
+else:
+    prompt_file = 'prompts/naive.pt'
+
+with open(prompt_file, 'r') as f:
     prompt_template = f.read()
 
 @st.cache_data
@@ -274,19 +287,46 @@ def clear_chat_history():
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 # Function for generating LLaMA2 response
-def generate_llama2_response(question):
-    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. \
-        You only respond once as 'Assistant'."
-    for dict_message in ss.messages:
-        if dict_message["role"] == "user":
-            string_dialogue += "User: " + dict_message["content"] + "\n\n"
+def generate_llama2_response(question, use_history=False):
+    # Format chat history if enabled
+    history_text = ""
+    if use_history and len(ss.messages) > 1:
+        # Build chat history from previous messages (excluding initial message and current question)
+        for dict_message in ss.messages[1:-1]:  # Skip initial greeting and current user question
+            if dict_message["role"] == "user":
+                history_text += "User: " + dict_message["content"] + "\n"
+            elif dict_message["role"] == "assistant":
+                # Get content without source references
+                content = dict_message["content"]
+                history_text += "Assistant: " + content + "\n"
+
+        if history_text:
+            history_text = history_text.strip()
         else:
-            string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
-    #output = replicate.run(llm, 
-    #                       input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
-    #                              "temperature":temperature, "top_p":top_p, "max_length":max_length, "repetition_penalty":1})
-    output = rag.retrieve_generate(question=question, llm=llm, prompt=prompt,retriever=retriever,
-                                  return_source=return_source, return_chain=False)
+            history_text = "No previous conversation."
+    else:
+        history_text = "No previous conversation."
+
+    # Call RAG with or without history
+    if use_history:
+        output = rag.retrieve_generate(
+            question=question,
+            llm=llm,
+            prompt=prompt,
+            retriever=retriever,
+            history=history_text,
+            return_source=return_source,
+            return_chain=False
+        )
+    else:
+        output = rag.retrieve_generate(
+            question=question,
+            llm=llm,
+            prompt=prompt,
+            retriever=retriever,
+            return_source=return_source,
+            return_chain=False
+        )
 
     return output
 
@@ -321,7 +361,7 @@ if ss.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             p = ' Please answer the question as detailed as possible and make up you answer in markdown format.'
-            response = generate_llama2_response(f'{question}{p}')
+            response = generate_llama2_response(f'{question}{p}', use_history=enable_chat_history)
             #response = generate_llama2_response(question)
             placeholder = st.empty()
             full_response = ''

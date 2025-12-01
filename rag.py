@@ -16,7 +16,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import LlamaCppEmbeddings, HuggingFaceBgeEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.schema.runnable import RunnablePassthrough
-from langchain_core.runnables import RunnableParallel
+from langchain_core.runnables import RunnableParallel, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.llms import LlamaCpp
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -258,7 +258,7 @@ def get_contextualize_question(llm, history_prompt_template, input_: dict):
         history_context = input_['question']
     return history_context
 
-def retrieve_generate(question, llm, prompt, retriever, history=None, return_source=True, return_chain=False): 
+def retrieve_generate(question, llm, prompt, retriever, history=None, return_source=True, return_chain=False):
     if return_source:
         rag_source = (RunnablePassthrough.assign(
             context=(lambda x: utils.format_docs(x['context'])))
@@ -268,8 +268,10 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
         )
 
         if history:
+            # Wrap history string in RunnableLambda to make it compatible with RunnableParallel
+            history_runnable = RunnableLambda(lambda x: history)
             rag_chain = RunnableParallel(
-                {'context':retriever, 'history':history, 'question':RunnablePassthrough()}).assign(
+                {'context':retriever, 'history':history_runnable, 'question':RunnablePassthrough()}).assign(
                     answer=rag_source)
         else:
             rag_chain = RunnableParallel(
@@ -278,7 +280,9 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
 
     else:
         if history:
-            rag_chain = ({'context':retriever, 'history':history, 'question':RunnablePassthrough()}
+            # Wrap history string in RunnableLambda to make it compatible with RunnableParallel
+            history_runnable = RunnableLambda(lambda x: history)
+            rag_chain = ({'context':retriever, 'history':history_runnable, 'question':RunnablePassthrough()}
                          | prompt | llm)
         else:
             rag_chain = ({'context':retriever, 'question':RunnablePassthrough()}
