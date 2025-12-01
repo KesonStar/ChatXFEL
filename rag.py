@@ -27,6 +27,7 @@ from transformers import AutoTokenizer
 from langchain_community.chat_models import ChatOllama
 
 from query_rewriter import rewrite_query
+import torch
 
 sys.path.append('/home/zhangxf/workdir/LLM/llm-shine/ChatXFEL/src')
 import utils
@@ -113,7 +114,8 @@ def split(docs, size=2000, overlap=200, length_func=len, sep=None, is_regex=Fals
 
 def get_embedding_bge(model_kwargs=None, encode_kwargs=None):
     if model_kwargs is None:
-        model_kwargs = {'device':'cpu'}
+        device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+        model_kwargs = {'device':device}
     if encode_kwargs is None:
         encode_kwargs = {'normalize_embeddings':True}
     model_name = 'BAAI/bge-m3'
