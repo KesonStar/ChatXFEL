@@ -253,6 +253,10 @@ def log_feedback(feedback:dict, use_mongo):
 for message in ss.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
+        if message.get("rewritten_query"):
+            with st.expander("🔍 Optimized Search Query", expanded=False):
+                st.markdown("**Rewritten for Search:**")
+                st.success(message["rewritten_query"])
         #try:
         c = st.columns([8,2.5])
         if 'source' in message.keys():
@@ -312,9 +316,10 @@ def generate_llama2_response(question, use_history=False):
         history_text = "No previous conversation."
 
     # Call RAG with or without history
+    raw_question = question  # keep the user query clean for rewrite/retrieval
     if use_history:
         output = rag.retrieve_generate(
-            question=question,
+            question=raw_question,
             llm=llm,
             prompt=prompt,
             retriever=retriever,
@@ -325,7 +330,7 @@ def generate_llama2_response(question, use_history=False):
         )
     else:
         output = rag.retrieve_generate(
-            question=question,
+            question=raw_question,
             llm=llm,
             prompt=prompt,
             retriever=retriever,
@@ -366,9 +371,18 @@ if 'feedback_bad' not in ss:
 if ss.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            p = ' Please answer the question as detailed as possible and make up you answer in markdown format.'
-            response = generate_llama2_response(f'{question}{p}', use_history=enable_chat_history)
-            #response = generate_llama2_response(question)
+            response = generate_llama2_response(question, use_history=enable_chat_history)
+
+            # Display rewritten query if available
+            if 'rewritten_query' in response and response['rewritten_query']:
+                # Get the original user question (latest user turn)
+                original_user_question = ss.messages[-1]["content"]
+                with st.expander("🔍 Optimized Search Query", expanded=False):
+                    st.markdown("**Original Question:**")
+                    st.info(original_user_question)
+                    st.markdown("**Rewritten for Search:**")
+                    st.success(response['rewritten_query'])
+
             placeholder = st.empty()
             full_response = ''
             source = ''
@@ -418,6 +432,9 @@ if ss.messages[-1]["role"] != "assistant":
         message = {"role": "assistant", "content": full_response}
         #if enable_log:
         #    utils.log_rag(client_ip, question_time, question, full_response, use_mongo=False)
+
+    if 'rewritten_query' in response and response['rewritten_query']:
+        message["rewritten_query"] = response['rewritten_query']
     if enable_log:
         logs = {'IP':client_ip, 'Time':question_time, 'Model':selected_model, 'Question': question, 'Answer':full_response, 'Source':source}
         utils.log_rag(logs, use_mongo=use_mongo)

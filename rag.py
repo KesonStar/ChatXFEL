@@ -292,13 +292,16 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
     
     # use_query_rewrite logic
     original_question = question
+    rewritten_question = None  # Track if query was rewritten
     if use_query_rewrite:
         try:
             rewritten = rewrite_query(llm, original_question, history)
             question = rewritten
+            rewritten_question = rewritten
         except Exception as e:
             print("Query rewrite failed, using original question.", e)
             question = original_question
+            rewritten_question = None
 
     if return_source:
         rag_source = (RunnablePassthrough.assign(
@@ -333,4 +336,9 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
         return rag_chain
     else:
         answer = rag_chain.invoke(question)
+        # Add rewritten query info to the answer if applicable
+        if rewritten_question:
+            # Only attach when the answer is a dict (return_source=True path)
+            if isinstance(answer, dict):
+                answer['rewritten_query'] = rewritten_question
         return answer
