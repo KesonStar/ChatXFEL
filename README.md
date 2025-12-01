@@ -1,7 +1,95 @@
-共有5个文件，介绍如下：
+# ChatXFEL
 
-1. `process_bibs.py`: 文献清洗，当初开发时摸索了多种方式。现在推荐最快捷的方法是用Medeley自动抓取文献的元数据，导出成bib文件，再写个python脚本提取出来，写入MongoDB数据库；实际处理单个文档时，利用python库`pdf2doi`获取到论文的doi，再按doi从MongoDB里检索获取相应的其它元数据。代码中可以看到利用`pdf2doi`或`pdf2bib`处理论文的示例。一篇论文的元数据至少包括标题、摘要、期刊、年份
-2. `vectorize_bibs.py`：文献矢量化。从中可以看到调用`BGE-M3`模型将文献矢量化以及将结果写入Milvus数据库的示例。
-3. `rag.py`：实现RAG各个过程，包括文献的加载与拆分，检索与生成等过程。提示：**LangChain**的版本迭代较快，可能需要参照最新手册
-4. `chatxfel_app.py`：利用`streamlit`写的一个UI界面，回答输出未实现打字机模式，也未添加历史对话功能；
-5. `naive.pt`：提示词示例。
+ChatXFEL is an intelligent Question & Answer system designed for the X-ray Free-Electron Laser (XFEL) community. It leverages Retrieval-Augmented Generation (RAG) to provide accurate answers based on a vast collection of scientific publications, technical reports, and theses.
+
+## Overview
+
+ChatXFEL assists researchers and engineers by retrieving relevant information from a specialized corpus of XFEL-related documents. The system processes PDF documents, extracts metadata, vectorizes the content for semantic search, and uses Large Language Models (LLMs) to synthesize answers with source citations.
+
+**Current Version:** Beta 1.0
+
+## Features
+
+*   **Domain-Specific RAG:** Tailored for XFEL scientific literature and engineering reports.
+*   **Dual Database Architecture:**
+    *   **MongoDB:** Stores document metadata (DOI, title, authors, publication year).
+    *   **Milvus:** Stores vector embeddings for high-performance semantic search.
+*   **Advanced Retrieval:** Utilizes the `BGE-M3` model for dense and sparse vector retrieval, with support for reranking.
+*   **Automated Pipeline:** Tools for batch processing PDFs, extracting metadata (via `pdf2doi`, `pdf2bib`), and vectorization.
+*   **Interactive UI:** A user-friendly web interface built with **Streamlit**.
+
+## Architecture
+
+The system consists of three main stages:
+
+1.  **Data Ingestion (`process_bibs.py`):** Scans directories for PDF files, extracts metadata (DOI, Title, Abstract) using online services (Crossref) or local extraction, and stores the metadata in MongoDB.
+2.  **Vectorization (`vectorize_bibs.py`):** Reads processed documents, splits text into chunks, generates embeddings using `BGE-M3`, and indexes them in the Milvus vector database.
+3.  **Inference (`chatxfel_app.py` & `rag.py`):** The Streamlit app captures user queries, retrieves relevant context from Milvus, and prompts the LLM to generate an answer with citations.
+
+## Prerequisites
+
+*   **Python:** 3.10 or higher recommended
+*   **Services:**
+    *   [MongoDB](https://www.mongodb.com/) (for metadata storage)
+    *   [Milvus](https://milvus.io/) (for vector storage)
+    *   [Ollama](https://ollama.com/) (for LLM inference API)
+
+## Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>
+    cd ChatXFEL
+    ```
+
+2.  **Install dependencies:**
+    It is recommended to use a virtual environment (conda or venv).
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Configuration
+
+Before running the scripts, ensure your database connections are configured. 
+
+*   **Database Credentials:** Check `utils.py` (or the script arguments) to configure your MongoDB and Milvus host, port, and credentials.
+*   **LLM Endpoint:** The system connects to an Ollama instance. Ensure the `base_url` in `rag.py` or `chatxfel_app.py` points to your running Ollama server.
+
+## Usage
+
+### 1. Process Bibliographies (PDFs)
+Scan a directory of PDFs, extract metadata, and save to MongoDB.
+
+```bash
+python process_bibs.py --file_path /path/to/pdfs --db_name your_db --collection bibs
+```
+*Use `--help` for more options like duplicate detection or manual metadata entry.*
+
+### 2. Vectorize Documents
+Embed the processed documents and insert them into Milvus.
+
+```bash
+# Generate a file list from MongoDB first
+python vectorize_bibs.py --generate-list --mongo-db your_db --mongo-col bibs --file-path ./data
+
+# Run vectorization (creating a new Milvus collection if needed)
+python vectorize_bibs.py --new --collection chatxfel_vectors --file-path ./data --model bge
+```
+
+### 3. Run the Chat Application
+Launch the web interface.
+
+```bash
+streamlit run chatxfel_app.py
+```
+
+## Roadmap
+
+We are actively working on the following enhancements (see `IMPLEMENTATION_TODO.md` for details):
+
+*   **Query Rewrite:** Improving retrieval by rewriting ambiguous user queries based on conversation history.
+*   **Chat History Management:** Enabling multi-turn conversations with context awareness.
+*   **Agent-based Research:** Implementing a ReAct Agent to perform deep research tasks, multi-step reasoning, and cross-referencing.
+
+
+
