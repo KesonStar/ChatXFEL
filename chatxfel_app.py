@@ -40,7 +40,7 @@ def reset_retriever_cache():
         pass
 
 with st.sidebar:
-    st.title('ChatXFEL Beta 1.0')
+    st.title('ChatXFEL Beta 2.0')
     #st.markdown('[About ChatXFEL](https://confluence.cts.shanghaitech.edu.cn/pages/viewpage.action?pageId=129762874)')
     st.markdown('[ChatXFEL简介与提问技巧](https://confluence.cts.shanghaitech.edu.cn/pages/viewpage.action?pageId=129762874)')
     #st.write(':red[You have agreed the recording of your IP and access time.]')
@@ -49,8 +49,8 @@ with st.sidebar:
     # Refactored from https://github.com/a16z-infra/llama2-chatbot
     #st.subheader('Models and parameters')
     #model_list = ['LLaMA3.1-8B', 'Qwen2.5-7B']
-    model_list = ['Qwen3-30B', 'QwQ-32B']
-    col_list = ['chatxfel', 'report', 'book']
+    model_list = ['Qwen3-30B-Instruct', 'Qwen3-30B-thinking']
+    col_list = ['xfel_bibs_collection_with_abstract', 'chatxfel', 'report', 'book']
     embedding_list = ['BGE-M3']
 
     selected_model = st.sidebar.selectbox('LLM model', model_list, index=0, key='selected_model')
@@ -76,6 +76,9 @@ with st.sidebar:
     selected_col = st.sidebar.selectbox('Bibliography collection', col_list, key='select_col', on_change=reset_retriever_cache)
     col_name = selected_col
     with st.popover('About the collection'):
+        if col_name == 'xfel_bibs_collection_with_abstract':
+            msg = '''This is your custom XFEL bibliography collection with abstracts.'''
+            st.markdown(msg)
         if col_name == 'book':
             msg = '''This collection now only contains some theses from EuXFEL.'''
             st.markdown(msg)
@@ -118,6 +121,36 @@ with st.sidebar:
     # button to Enable Query Rewrite
     use_query_rewrite = st.sidebar.checkbox('Enable Query Rewrite', key='query_rewrite', value=True)
 
+    # Hybrid Search settings
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Retrieval Mode")
+    use_hybrid_search = st.sidebar.checkbox('Enable Hybrid Search', key='hybrid_search', value=False)
+    if use_hybrid_search:
+        with st.popover(':information_source: About Hybrid Search'):
+            msg = '''Hybrid Search combines:
+            - **Dense Vector**: Semantic similarity search (understands meaning)
+            - **Sparse Vector**: Keyword matching (like traditional search)
+
+            Adjust weights to balance between semantic understanding and exact keyword matches.
+            Uses Reciprocal Rank Fusion (RRF) to merge results.'''
+            st.markdown(msg)
+
+        st.sidebar.markdown("**Search Weight Balance:**")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            dense_weight = st.slider('Dense (Semantic)', min_value=0.0, max_value=1.0, value=0.5, step=0.1, key='dense_weight')
+        with col2:
+            sparse_weight = st.slider('Sparse (Keyword)', min_value=0.0, max_value=1.0, value=0.5, step=0.1, key='sparse_weight')
+
+        # Show normalized weights
+        total = dense_weight + sparse_weight
+        if total > 0:
+            st.sidebar.caption(f"Normalized: Dense={dense_weight/total:.1%}, Sparse={sparse_weight/total:.1%}")
+    else:
+        dense_weight = 0.5
+        sparse_weight = 0.5
+
+    st.sidebar.markdown("---")
     enable_log = st.sidebar.checkbox('Enable log', key='log', value=True)
     use_monog = False
     if enable_log:
@@ -148,7 +181,7 @@ embedding = get_embedding(embedding_model=selected_em, n_ctx=n_ctx)
 
 #def get_llm_ollama(model_name, num_predict, num_ctx=8192, keep_alive=-1, temperature=0.1, base_url='http://10.15.85.78:11434'):
 @st.cache_resource
-def get_llm(model_name, num_predict, keep_alive, num_ctx=8192, temperature=0.0):
+def get_llm(model_name, num_predict, keep_alive, num_ctx=8192, temperature=0.8):
     print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: getting LLM...")
     llm = rag.get_llm_ollama(model_name=model_name, num_predict=num_predict, 
                              keep_alive=keep_alive, num_ctx=num_ctx, temperature=temperature, base_url='http://10.15.102.186:9000')
@@ -210,22 +243,111 @@ def get_retriever(connection_args, col_name, _embedding):
     return retriever
 
 @st.cache_resource
+def get_embedding_bge_m3_cached():
+    """
+    Get BGE-M3 embedding function for hybrid search.
+
+    Returns:
+        BGE-M3 embedding function or None if loading fails
+    """
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: loading BGE-M3 embedding for hybrid search...")
+    try:
+        return rag.get_embedding_bge_m3()
+    except Exception as e:
+        st.error(f"Failed to load BGE-M3 model for hybrid search: {e}")
+        st.warning("Hybrid search unavailable. Please use dense-only search mode or check model availability.")
+        return None
+
+@st.cache_resource
+def get_hybrid_retriever_cached(connection_args, col_name, _embedding_m3, dense_w, sparse_w, top_n, filters=None):
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: getting hybrid retriever...")
+    retriever = rag.get_hybrid_retriever(
+        connection_args=connection_args,
+        col_name=col_name,
+        embedding=_embedding_m3,
+        dense_weight=dense_w,
+        sparse_weight=sparse_w,
+        use_rerank=True,
+        top_n=top_n,
+        filters=filters
+    )
+    return retriever
+
+@st.cache_resource
 def get_retriever_runtime(_retriever_obj, _compressor, filters=None):
-    #print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: getting retriever at runtime...")
-    #search_kwargs = {'k':10, 'params': {'ef': 20}}
-    search_kwargs = {'k':10}
-    if filters:
-        search_kwargs = {**search_kwargs, **filters}
-    compression_retriever = ContextualCompressionRetriever(base_compressor=_compressor,
-                                                   base_retriever=_retriever_obj.as_retriever(search_kwargs=search_kwargs))
+    """
+    Wrap a retriever object with a compressor.
+    Handles both Milvus vector stores (need .as_retriever()) and BaseRetriever instances.
+    """
+    from langchain_core.retrievers import BaseRetriever
+
+    # Check if the object is already a retriever
+    if isinstance(_retriever_obj, BaseRetriever):
+        # Already a retriever, use it directly
+        base_retriever = _retriever_obj
+    else:
+        # It's a vector store (e.g., Milvus), convert to retriever
+        search_kwargs = {'k': 10}
+        if filters:
+            search_kwargs = {**search_kwargs, **filters}
+        base_retriever = _retriever_obj.as_retriever(search_kwargs=search_kwargs)
+
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=_compressor,
+        base_retriever=base_retriever
+    )
     return compression_retriever
 
-retriever_obj = get_retriever(connection_args, selected_col, embedding)
-compressor = get_rerank_model(top_n=n_recall)
+# Prepare filters
 filters = {}
 if filter_year:
     #filters['expr'] = f'year >= {year_start} and year <= {year_end}'
     filters['expr'] = f'{year_start} <= year <= {year_end}'
+
+# """
+# Retriever Architecture:
+
+# There are two retrieval modes:
+
+# 1. Dense-only Search (default):
+#    - Uses HuggingFaceBgeEmbeddings for semantic search
+#    - Single dense vector (1024-dim) stored in 'dense_vector' field
+#    - Returns: Milvus vector store -> wrapped with reranker -> ContextualCompressionRetriever
+
+# 2. Hybrid Search (when enabled in sidebar):
+#    - Uses BGEM3EmbeddingFunction for dual-vector search
+#    - Dense vector (1024-dim) + Sparse vector (keyword-based)
+#    - Combines results using Reciprocal Rank Fusion (RRF)
+#    - Returns: HybridRetriever (BaseRetriever) -> optionally wrapped with reranker
+#    - Falls back to dense-only if BGE-M3 model fails to load
+
+# Both paths produce a retriever that can be used with rag.retrieve_generate()
+# """
+
+# Create retriever based on mode selection
+if use_hybrid_search:
+    # Use hybrid search mode with reranking
+    # Get BGE-M3 embedding function (required for hybrid search with dense + sparse vectors)
+    embedding_m3 = get_embedding_bge_m3_cached()
+
+    if embedding_m3 is None:
+        # Fall back to dense-only search if BGE-M3 fails to load
+        st.warning(" Falling back to dense-only search mode due to BGE-M3 loading error.")
+        retriever_obj = get_retriever(connection_args, selected_col, embedding)
+        compressor = get_rerank_model(top_n=n_recall)
+        retriever = get_retriever_runtime(retriever_obj, compressor, filters=filters)
+    else:
+        # BGE-M3 loaded successfully, use hybrid search
+        filter_expr = filters.get('expr', None)
+        retriever = get_hybrid_retriever_cached(
+            connection_args, selected_col, embedding_m3,
+            dense_weight, sparse_weight, n_recall, filters=filter_expr
+        )
+else:
+    # Use traditional dense-only search
+    retriever_obj = get_retriever(connection_args, selected_col, embedding)
+    compressor = get_rerank_model(top_n=n_recall)
+    retriever = get_retriever_runtime(retriever_obj, compressor, filters=filters)
 #if filter_title:
 #    expr_title = ''
 #    for i, word in enumerate(keywords):
@@ -237,8 +359,6 @@ if filter_year:
 #        filters['expr'] += ' and ' + expr_title
 #    else:
 #        filters['expr'] = expr_title
-    
-retriever = get_retriever_runtime(retriever_obj, compressor, filters=filters)
 
 initial_message = {"role": "assistant", "content": "What do you want to know about XFEL?"}
 # Store LLM generated responses
@@ -254,7 +374,7 @@ for message in ss.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
         if message.get("rewritten_query"):
-            with st.expander("🔍 Optimized Search Query", expanded=False):
+            with st.expander("Optimized Search Query", expanded=False):
                 st.markdown("**Rewritten for Search:**")
                 st.success(message["rewritten_query"])
         #try:
@@ -377,7 +497,7 @@ if ss.messages[-1]["role"] != "assistant":
             if 'rewritten_query' in response and response['rewritten_query']:
                 # Get the original user question (latest user turn)
                 original_user_question = ss.messages[-1]["content"]
-                with st.expander("🔍 Optimized Search Query", expanded=False):
+                with st.expander("Optimized Search Query", expanded=False):
                     st.markdown("**Original Question:**")
                     st.info(original_user_question)
                     st.markdown("**Rewritten for Search:**")

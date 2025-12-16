@@ -1,5 +1,6 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_community.chat_models import ChatOllama
+import utils
 
 REWRITE_TEMPLATE = """
 You are a query rewriting assistant specialized in X-ray Free-Electron Laser (XFEL) research.
@@ -15,7 +16,6 @@ Guidelines:
    - FEL → Free-Electron Laser
    - SASE → Self-Amplified Spontaneous Emission
    - XFEL → X-ray Free-Electron Laser
-   - EuXFEL → European XFEL
    - LCLS → Linac Coherent Light Source
    - SACLA → SPring-8 Angstrom Compact Free Electron Laser
 3. Keep technical terms and specific parameter names (wavelength, pulse duration, photon energy, etc.)
@@ -42,7 +42,7 @@ def rewrite_query(llm: ChatOllama, question, history):
         history=history if history else "",
         question=question
     )
-    
+
     result = llm.invoke(formatted_prompt)
 
     # If result is an AIMessage (typical for ChatOllama)
@@ -51,5 +51,9 @@ def rewrite_query(llm: ChatOllama, question, history):
     else:
         # Fallback: convert to text
         rewritten = str(result)
+
+    # Strip thinking tags from thinking models (e.g., qwen3-30B-thinking)
+    # This removes CoT content before </think> tag
+    rewritten = utils.strip_thinking_tags(rewritten)
 
     return rewritten.strip()

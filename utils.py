@@ -204,20 +204,54 @@ def log_rag(log_data: Dict[str, Any], use_mongo: bool = True,
 def clean_text(text: str) -> str:
     """
     Clean text by removing extra whitespace and special characters
-    
+
     Args:
         text: Input text to clean
-    
+
     Returns:
         Cleaned text
     """
     if not text:
         return ""
-    
+
     # Remove extra whitespace
     text = ' '.join(text.split())
-    
+
     return text
+
+
+def strip_thinking_tags(text: str) -> str:
+    """
+    Remove Chain of Thought (CoT) content from thinking model responses.
+    If the text contains </think> tag, removes all content before and including the tag.
+
+    This is used for thinking models like qwen3-30B-thinking which output their
+    reasoning process within <think>...</think> tags. For user-facing responses,
+    we only want to show the final answer after </think>.
+
+    Args:
+        text: LLM response text that may contain <think>...</think> tags
+
+    Returns:
+        Cleaned text with thinking content removed
+
+    Example:
+        input: "<think>Let me analyze... steps...</think>The answer is X"
+        output: "The answer is X"
+    """
+    if not text:
+        return ""
+
+    # Find the closing </think> tag
+    think_end_tag = "</think>"
+    if think_end_tag in text:
+        # Find the position of </think> and remove everything before it
+        idx = text.find(think_end_tag)
+        # Return text after </think> tag (including tag length)
+        text = text[idx + len(think_end_tag):]
+
+    # Strip leading/trailing whitespace
+    return text.strip()
 
 
 def get_collection_stats(connection_args: Dict[str, Any], collection_name: str) -> Dict[str, Any]:
