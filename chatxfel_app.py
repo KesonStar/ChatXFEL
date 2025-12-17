@@ -150,6 +150,12 @@ with st.sidebar:
         dense_weight = 0.5
         sparse_weight = 0.5
 
+    use_routing = st.sidebar.checkbox('Enable DOI Scoped Search', key='use_routing', value=False,
+                                    help="First find relevant papers (DOI), then search strictly within those papers.")
+    """
+    当前仅在xfel_bibs_collection_with_abstract这一个库中做abstract与text的检索。不过理论上是可以在两个分开的向量库中检索的
+    """
+
     st.sidebar.markdown("---")
     enable_log = st.sidebar.checkbox('Enable log', key='log', value=True)
     use_monog = False
@@ -348,6 +354,22 @@ else:
     retriever_obj = get_retriever(connection_args, selected_col, embedding)
     compressor = get_rerank_model(top_n=n_recall)
     retriever = get_retriever_runtime(retriever_obj, compressor, filters=filters)
+
+# 应用路由逻辑
+if use_routing:
+    print(f"Initializing Routing...")
+    
+    # 确定 Embedding
+    routing_embedding = embedding_m3 if (use_hybrid_search and embedding_m3) else embedding
+    
+    retriever = rag.get_routing_retriever(
+        connection_args=connection_args,
+        abstract_retriever=retriever,   # Step 1: 广撒网检索
+        fulltext_col_name=selected_col, # Step 2: 在指定库中（这里是自己）按DOI检索
+        embedding_function=routing_embedding,
+        fulltext_top_k=n_recall 
+    )
+
 #if filter_title:
 #    expr_title = ''
 #    for i, word in enumerate(keywords):
