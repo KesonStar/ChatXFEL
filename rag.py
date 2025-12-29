@@ -524,6 +524,155 @@ def get_hybrid_retriever(connection_args, col_name, embedding,
     else:
         return retriever
 
+# ... [保留前面的 imports 和 HybridRetriever 类] ...
+
+class RoutingRetriever(BaseRetriever):
+    """
+    Two-stage retrieval implementation:
+    Stage 1: Search in Base/Abstract Collection to find relevant DOIs.
+    Stage 2: Search in Full-text Collection restricting scope to those DOIs.
+    """
+    abstract_retriever: BaseRetriever
+    fulltext_collection: Any = None
+    embedding_function: Any
+    id_field: str = "doi"
+    fulltext_top_k: int = 10
+    
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, abstract_retriever, connection_args, fulltext_col_name, embedding_function, 
+                 id_field="doi", fulltext_top_k=10, **kwargs):
+        super().__init__(
+            abstract_retriever=abstract_retriever,
+            embedding_function=embedding_function,
+            id_field=id_field,
+            fulltext_top_k=fulltext_top_k,
+            **kwargs
+        )
+        
+        # Initialize connection to the Full Text Milvus Collection (even if it's the same collection)
+        alias = f"routing_full_{fulltext_col_name}"
+        try:
+            if alias not in connections.list_connections():
+                conn_args = {
+                    'alias': alias,
+                    'host': connection_args.get('host', 'localhost'),
+                    'port': connection_args.get('port', '19530')
+                }
+                # Copy authentication args
+                for key in ['user', 'password', 'db_name', 'secure']:
+                    if key in connection_args:
+                        conn_args[key] = connection_args[key]
+                connections.connect(**conn_args)
+
+            self.fulltext_collection = Collection(name=fulltext_col_name, using=alias)
+            self.fulltext_collection.load()
+            print(f"RoutingRetriever: Connected to target collection '{fulltext_col_name}'")
+        except Exception as e:
+            print(f"Error connecting to target collection '{fulltext_col_name}': {e}")
+            raise
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun = None
+    ) -> List:
+        from langchain_classic.schema.document import Document
+
+        # --- Stage 1: Search Abstracts (Base Search) ---
+        # print(f"Routing: Searching base layer for '{query}'...")
+        abstract_docs = self.abstract_retriever.invoke(query)
+        
+        if not abstract_docs:
+            return []
+
+        # Extract unique IDs (DOIs)
+        target_ids = list(set([
+            doc.metadata.get(self.id_field) 
+            for doc in abstract_docs 
+            if doc.metadata.get(self.id_field)
+        ]))
+
+        if not target_ids:
+            # print("Warning: No DOIs found via base retrieval. Returning base docs.")
+            return abstract_docs
+
+        # print(f"Routing: Found {len(target_ids)} relevant DOIs. Focusing search.")
+
+        # --- Stage 2: Search Full Text with Filtering ---
+        try:
+            # 1. Prepare Milvus Expression
+            ids_str = ", ".join([f"'{str(id_)}'" for id_ in target_ids])
+            expr = f"{self.id_field} in [{ids_str}]"
+            
+            # 2. Embed the query
+            if hasattr(self.embedding_function, 'encode_queries'):
+                # BGE-M3
+                embeddings_dict = self.embedding_function.encode_queries([query])
+                dense_vec = embeddings_dict['dense'][0]
+            elif hasattr(self.embedding_function, 'embed_query'):
+                # Standard LangChain
+                dense_vec = self.embedding_function.embed_query(query)
+            else:
+                # Fallback for old interfaces
+                dense_vec = self.embedding_function.embed_documents([query])[0]
+
+            # 3. Execute Search
+            search_params = {"metric_type": "IP", "params": {"ef": 20}}
+            
+            # Add 'abstract' to output_fields just in case 'text' is empty
+            results = self.fulltext_collection.search(
+                data=[dense_vec],
+                anns_field="dense_vector", 
+                param=search_params,
+                limit=self.fulltext_top_k,
+                expr=expr, 
+                output_fields=['title', 'doi', 'journal', 'year', 'page', 'text', 'abstract', 'source']
+            )
+            
+            # 4. Convert to Documents
+            documents = []
+            for hits in results:
+                for hit in hits:
+                    entity = hit.entity
+                    
+                    # Logic to determine page_content: Priority Text -> Fallback Abstract
+                    content = entity.get('text', '')
+                    if content is None or str(content).strip() == '':
+                        content = entity.get('abstract', '')
+                        
+                    metadata = {
+                        'title': entity.get('title', ''),
+                        'doi': entity.get('doi', ''),
+                        'journal': entity.get('journal', ''),
+                        'year': entity.get('year', ''),
+                        'page': entity.get('page', ''),
+                        'source': entity.get('source') or entity.get('title', ''),
+                        'retrieval_stage': 'focused_fulltext'
+                    }
+                    doc = Document(
+                        page_content=str(content), 
+                        metadata=metadata
+                    )
+                    documents.append(doc)
+            
+            return documents
+
+        except Exception as e:
+            print(f"Error in routing retrieval Stage 2: {e}")
+            # Fallback strategy
+            return abstract_docs
+
+def get_routing_retriever(connection_args, abstract_retriever, fulltext_col_name, embedding_function, fulltext_top_k=6):
+    """
+    Factory function to create the RoutingRetriever
+    """
+    return RoutingRetriever(
+        abstract_retriever=abstract_retriever,
+        connection_args=connection_args,
+        fulltext_col_name=fulltext_col_name,
+        embedding_function=embedding_function,
+        fulltext_top_k=fulltext_top_k
+    )
 
 def get_prompt(prompt='', return_format=True):
     if prompt == '':
