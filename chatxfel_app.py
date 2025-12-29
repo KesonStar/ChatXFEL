@@ -2,6 +2,7 @@ from onnx import ModelProto
 import streamlit as st
 import sys
 import time
+import json
 from datetime import datetime
 from langchain_classic.retrievers.document_compressors.cross_encoder_rerank import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
@@ -11,6 +12,7 @@ from streamlit import session_state as ss
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 sys.path.append('/home/zhangxf2/LLM/llm-shine/ChatXFEL')
 import rag, utils
+from research_agent import DeepResearchAgent
 
 # App title
 #st.set_page_config(page_title="ChatXFEL", layout='wide')
@@ -46,6 +48,28 @@ with st.sidebar:
     #st.write(':red[You have agreed the recording of your IP and access time.]')
     #st.markdown('**IMPORTANT: The answers given by ChatXFEL are for informational purposes only, please consult the references in the source.**')
     st.markdown('**重要提示：大模型的回答仅供参考，点击Sources查看参考文献**')
+
+    # Mode selection: Basic RAG vs Deep Research
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Research Mode")
+    research_mode = st.sidebar.radio(
+        "Select mode:",
+        ["Basic RAG", "Deep Research"],
+        key="research_mode",
+        help="Basic RAG: Quick Q&A | Deep Research: Structured literature review"
+    )
+    if research_mode == "Deep Research":
+        with st.popover(':information_source: About Deep Research'):
+            msg = '''**Deep Research** generates comprehensive literature reviews through:
+            1. **Clarification**: Ask questions to understand your research needs
+            2. **Knowledge Extraction**: Create structured outline of key topics
+            3. **Parallel Search**: Retrieve relevant papers for each topic
+            4. **Review Generation**: Synthesize findings into a structured review
+
+            This mode takes longer but provides more comprehensive analysis.'''
+            st.markdown(msg)
+    st.sidebar.markdown("---")
+
     # Refactored from https://github.com/a16z-infra/llama2-chatbot
     #st.subheader('Models and parameters')
     #model_list = ['LLaMA3.1-8B', 'Qwen2.5-7B']
@@ -365,6 +389,41 @@ initial_message = {"role": "assistant", "content": "What do you want to know abo
 if "messages" not in ss.keys():
     ss.messages = [initial_message]
 
+# Deep Research state initialization
+if "dr_stage" not in ss:
+    ss.dr_stage = "initial"  # initial, clarification, confirmation, searching, review
+if "dr_original_question" not in ss:
+    ss.dr_original_question = ""
+if "dr_clarification_questions" not in ss:
+    ss.dr_clarification_questions = None
+if "dr_clarifications" not in ss:
+    ss.dr_clarifications = {}
+if "dr_knowledge_outline" not in ss:
+    ss.dr_knowledge_outline = None
+if "dr_search_results" not in ss:
+    ss.dr_search_results = None
+if "dr_final_review" not in ss:
+    ss.dr_final_review = ""
+if "dr_references" not in ss:
+    ss.dr_references = ""
+
+def reset_deep_research():
+    """Reset all Deep Research state variables."""
+    ss.dr_stage = "initial"
+    ss.dr_original_question = ""
+    ss.dr_clarification_questions = None
+    ss.dr_clarifications = {}
+    ss.dr_knowledge_outline = None
+    ss.dr_search_results = None
+    ss.dr_final_review = ""
+    ss.dr_references = ""
+
+@st.cache_resource
+def get_deep_research_agent(_llm, _retriever, _reranker=None):
+    """Create and cache the Deep Research Agent."""
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: initializing Deep Research Agent...")
+    return DeepResearchAgent(_llm, _retriever, _reranker)
+
 def log_feedback(feedback:dict, use_mongo):
     if feedback.get('Feedback', '') == '':
         feedback['Feedback'] = ss['feedback']+1
@@ -473,99 +532,324 @@ if ctx:
     client_ip = session.request.remote_ip
     log_ip_time(ctx.session_id)
 
-# User-provided prompt
-question_time = ''
-if question:= st.chat_input():
-    if enable_log:
-        question_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    ss.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.write(question)
+# ============================================================
+# BASIC RAG MODE
+# ============================================================
+if research_mode == "Basic RAG":
+    # User-provided prompt
+    question_time = ''
+    if question:= st.chat_input():
+        if enable_log:
+            question_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        ss.messages.append({"role": "user", "content": question})
+        with st.chat_message("user"):
+            st.write(question)
 
-# Generate a new response if last message is not from assistant
-if 'feedback_good' not in ss:
-    ss['feedback_good'] = None
-if 'feedback_bad' not in ss:
-    ss['feedback_bad'] = None
+    # Generate a new response if last message is not from assistant
+    if 'feedback_good' not in ss:
+        ss['feedback_good'] = None
+    if 'feedback_bad' not in ss:
+        ss['feedback_bad'] = None
 
-if ss.messages[-1]["role"] != "assistant":
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = generate_llama2_response(question, use_history=enable_chat_history)
+    if ss.messages[-1]["role"] != "assistant":
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = generate_llama2_response(question, use_history=enable_chat_history)
 
-            # Display rewritten query if available
-            if 'rewritten_query' in response and response['rewritten_query']:
-                # Get the original user question (latest user turn)
-                original_user_question = ss.messages[-1]["content"]
-                with st.expander("Optimized Search Query", expanded=False):
-                    st.markdown("**Original Question:**")
-                    st.info(original_user_question)
-                    st.markdown("**Rewritten for Search:**")
-                    st.success(response['rewritten_query'])
+                # Display rewritten query if available
+                if 'rewritten_query' in response and response['rewritten_query']:
+                    # Get the original user question (latest user turn)
+                    original_user_question = ss.messages[-1]["content"]
+                    with st.expander("Optimized Search Query", expanded=False):
+                        st.markdown("**Original Question:**")
+                        st.info(original_user_question)
+                        st.markdown("**Rewritten for Search:**")
+                        st.success(response['rewritten_query'])
 
-            placeholder = st.empty()
-            full_response = ''
-            source = ''
-            if return_source:
-                full_response += response['answer']
-                placeholder.markdown(full_response)
-                #full_response += '\nContext: \n'
-                for i, c in enumerate(response['context']):
-                    source += f'{c.page_content}'
-                    title = c.metadata.get('title') if 'title' in c.metadata.keys() else c.metadata.get('source')
-                    doi = c.metadata.get('doi', '')
-                    journal = c.metadata.get('journal', '')
-                    year = c.metadata.get('year', '')
-                    page = c.metadata.get('page')
-                    if doi == '':
-                        source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, page {page}'
-                    else:
-                        source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, [{doi}](http://dx.doi.org/{doi}), page {page}'
-                    if i != len(response['context'])-1:
-                        source += '\n\n'
-                    #placeholder.markdown(source)
-                    if i == len(response['context'])-1:
-                        c = st.columns([8,3])
-                        with c[0].popover('Source'):
-                            st.markdown(source)
-                        #with c[1]:
-                        #    feedback = st.feedback('stars', key='feedback')
-                        #    if feedback is not None:
-                        #        log_feedback({'Feedback':str(feedback+1)}, use_mongo=use_mongo)
-                        #with c[1]:
-                        #    good = st.button(':thumbsup:', key='feedback_good', on_click=log_feedback, args=({'Feedback':'Good'},use_mongo,))
-                        #with c[2]:
-                        #    bad = st.button(':thumbsdown:', key='feedback_bad', on_click=log_feedback, args=({'Feedback':'Bad'}, use_mongo,))
-            else:
-                full_response = response.content
-                #for item in response:
-                #    full_response += item
-                #    placeholder.markdown(full_response)
-                placeholder.markdown(full_response)
-            #placeholder.markdown(full_response)
+                placeholder = st.empty()
+                full_response = ''
+                source = ''
+                if return_source:
+                    full_response += response['answer']
+                    placeholder.markdown(full_response)
+                    #full_response += '\nContext: \n'
+                    for i, c in enumerate(response['context']):
+                        source += f'{c.page_content}'
+                        title = c.metadata.get('title') if 'title' in c.metadata.keys() else c.metadata.get('source')
+                        doi = c.metadata.get('doi', '')
+                        journal = c.metadata.get('journal', '')
+                        year = c.metadata.get('year', '')
+                        page = c.metadata.get('page')
+                        if doi == '':
+                            source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, page {page}'
+                        else:
+                            source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, [{doi}](http://dx.doi.org/{doi}), page {page}'
+                        if i != len(response['context'])-1:
+                            source += '\n\n'
+                        #placeholder.markdown(source)
+                        if i == len(response['context'])-1:
+                            c = st.columns([8,3])
+                            with c[0].popover('Source'):
+                                st.markdown(source)
+                else:
+                    full_response = response.content
+                    placeholder.markdown(full_response)
 
-    if return_source:
-        message = {"role": "assistant", "content": full_response, "source":source}
-        #if enable_log:
-            #utils.log_rag(client_ip, question_time, question, full_response, source, use_mongo=False)
-    else:
-        message = {"role": "assistant", "content": full_response}
-        #if enable_log:
-        #    utils.log_rag(client_ip, question_time, question, full_response, use_mongo=False)
+        if return_source:
+            message = {"role": "assistant", "content": full_response, "source":source}
+        else:
+            message = {"role": "assistant", "content": full_response}
 
-    if 'rewritten_query' in response and response['rewritten_query']:
-        message["rewritten_query"] = response['rewritten_query']
-    if enable_log:
-        logs = {'IP':client_ip, 'Time':question_time, 'Model':selected_model, 'Question': question, 'Answer':full_response, 'Source':source}
-        utils.log_rag(logs, use_mongo=use_mongo)
-    ss.messages.append(message)
-    st.rerun()
-#c = st.columns([8,2.5])
-#feedback = st.feedback('stars', key='feedback')
-#with c[0]:
-#    pass
-#with c[1]:
-#    if feedback is not None:
-#        log_feedback({'Feedback':str(feedback+1)}, use_mongo=use_mongo)
-    #history.append({'role':'user','content':question})
-    #history.append({'role':'assistant', 'content':full_response})
+        if 'rewritten_query' in response and response['rewritten_query']:
+            message["rewritten_query"] = response['rewritten_query']
+        if enable_log:
+            logs = {'IP':client_ip, 'Time':question_time, 'Model':selected_model, 'Question': question, 'Answer':full_response, 'Source':source}
+            utils.log_rag(logs, use_mongo=use_mongo)
+        ss.messages.append(message)
+        st.rerun()
+
+# ============================================================
+# DEEP RESEARCH MODE
+# ============================================================
+else:
+    # Initialize Deep Research Agent
+    dr_agent = get_deep_research_agent(llm, retriever, compressor)
+
+    # Display current stage indicator
+    stage_labels = {
+        "initial": "1️⃣ Enter Research Topic",
+        "clarification": "2️⃣ Answer Clarification Questions",
+        "confirmation": "3️⃣ Confirm Knowledge Outline",
+        "searching": "4️⃣ Searching Documents...",
+        "review": "5️⃣ Literature Review Generated"
+    }
+    st.info(f"**Current Stage**: {stage_labels.get(ss.dr_stage, 'Unknown')}")
+
+    # Stage 1: Initial - Enter research topic
+    if ss.dr_stage == "initial":
+        st.markdown("### Enter Your Research Topic")
+        st.markdown("Describe the topic you want to explore. Be as specific as possible for better results.")
+
+        research_topic = st.text_area(
+            "Research Topic",
+            placeholder="e.g., Recent advances in serial femtosecond crystallography data processing methods",
+            height=100,
+            key="dr_input_topic"
+        )
+
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("Start Research", type="primary", disabled=not research_topic):
+                ss.dr_original_question = research_topic
+                with st.spinner("Generating clarification questions..."):
+                    try:
+                        ss.dr_clarification_questions = dr_agent.generate_clarification_questions(research_topic)
+                        ss.dr_stage = "clarification"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error generating questions: {e}")
+
+        with col2:
+            # Quick mode: skip clarification
+            if st.button("Quick Mode (Skip Clarification)", disabled=not research_topic):
+                ss.dr_original_question = research_topic
+                with st.spinner("Generating knowledge outline..."):
+                    try:
+                        ss.dr_knowledge_outline = dr_agent.extract_knowledge_points(research_topic, {})
+                        ss.dr_stage = "confirmation"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error generating outline: {e}")
+
+    # Stage 2: Clarification - Answer questions
+    elif ss.dr_stage == "clarification":
+        st.markdown("### Clarification Questions")
+        st.markdown("Please answer the following questions to help refine the research scope:")
+
+        st.info(f"**Your Research Topic**: {ss.dr_original_question}")
+
+        questions = ss.dr_clarification_questions.get("questions", [])
+
+        if questions:
+            for q in questions:
+                q_id = str(q.get("id", 0))
+                question_text = q.get("question", "")
+                purpose = q.get("purpose", "")
+
+                # Initialize answer if not exists
+                if q_id not in ss.dr_clarifications:
+                    ss.dr_clarifications[q_id] = ""
+
+                st.markdown(f"**Q{q_id}**: {question_text}")
+                st.caption(f"Purpose: {purpose}")
+                ss.dr_clarifications[q_id] = st.text_area(
+                    f"Your answer for Q{q_id}",
+                    value=ss.dr_clarifications.get(q_id, ""),
+                    key=f"dr_clarification_{q_id}",
+                    height=80,
+                    label_visibility="collapsed"
+                )
+                st.markdown("---")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬅️ Back", key="dr_back_to_initial"):
+                ss.dr_stage = "initial"
+                st.rerun()
+        with col2:
+            if st.button("Generate Outline ➡️", type="primary"):
+                with st.spinner("Generating knowledge outline..."):
+                    try:
+                        ss.dr_knowledge_outline = dr_agent.extract_knowledge_points(
+                            ss.dr_original_question,
+                            ss.dr_clarifications
+                        )
+                        ss.dr_stage = "confirmation"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error generating outline: {e}")
+
+    # Stage 3: Confirmation - Review and edit outline
+    elif ss.dr_stage == "confirmation":
+        st.markdown("### Knowledge Point Outline")
+        st.markdown("Review the generated outline. You can edit it before proceeding.")
+
+        if ss.dr_knowledge_outline:
+            # Display title
+            st.subheader(ss.dr_knowledge_outline.get("title", "Literature Review"))
+
+            # Display knowledge points
+            st.markdown("**Knowledge Points:**")
+            kps = ss.dr_knowledge_outline.get("knowledge_points", [])
+            for kp in kps:
+                importance_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(kp.get("importance", "medium"), "⚪")
+                with st.expander(f"{importance_emoji} [{kp.get('category', 'Unknown')}] {kp.get('topic', 'Unknown')}", expanded=False):
+                    st.markdown(f"**ID**: {kp.get('id', 'N/A')}")
+                    st.markdown(f"**Search Keywords**: {', '.join(kp.get('search_keywords', []))}")
+                    st.markdown(f"**Importance**: {kp.get('importance', 'medium')}")
+
+            # Display search strategy
+            st.markdown(f"**Search Strategy**: {ss.dr_knowledge_outline.get('search_strategy', 'N/A')}")
+
+            # Edit option
+            with st.expander("📝 Edit Outline (JSON)", expanded=False):
+                edited_json = st.text_area(
+                    "Edit JSON",
+                    value=json.dumps(ss.dr_knowledge_outline, indent=2, ensure_ascii=False),
+                    height=400,
+                    key="dr_edit_outline"
+                )
+                if st.button("Apply Changes"):
+                    try:
+                        ss.dr_knowledge_outline = json.loads(edited_json)
+                        st.success("Outline updated!")
+                        st.rerun()
+                    except json.JSONDecodeError as e:
+                        st.error(f"Invalid JSON: {e}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬅️ Back", key="dr_back_to_clarification"):
+                ss.dr_stage = "clarification"
+                st.rerun()
+        with col2:
+            if st.button("Start Search ➡️", type="primary"):
+                ss.dr_stage = "searching"
+                st.rerun()
+
+    # Stage 4: Searching - Execute searches
+    elif ss.dr_stage == "searching":
+        st.markdown("### Searching Documents")
+        st.markdown("Retrieving relevant documents for each knowledge point...")
+
+        # Get year filter if enabled
+        year_filter = None
+        if filter_year:
+            year_filter = (year_start, year_end)
+
+        # Progress display
+        kps = ss.dr_knowledge_outline.get("knowledge_points", [])
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        try:
+            # Perform search
+            status_text.text("Searching documents...")
+            ss.dr_search_results = dr_agent.search_documents(ss.dr_knowledge_outline, year_filter)
+            progress_bar.progress(50)
+
+            # Display search summary
+            status_text.text("Search complete. Generating review...")
+            for kp_id, docs in ss.dr_search_results.items():
+                st.write(f"- {kp_id}: {len(docs)} documents found")
+
+            # Generate review
+            progress_bar.progress(75)
+            ss.dr_final_review = dr_agent.generate_review(ss.dr_knowledge_outline, ss.dr_search_results)
+
+            # Format references
+            ss.dr_references = dr_agent.review_generator.format_references(ss.dr_search_results)
+
+            progress_bar.progress(100)
+            status_text.text("Review generated successfully!")
+
+            ss.dr_stage = "review"
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Error during search/generation: {e}")
+            if st.button("Retry"):
+                st.rerun()
+            if st.button("⬅️ Back to Outline"):
+                ss.dr_stage = "confirmation"
+                st.rerun()
+
+    # Stage 5: Review - Display final review
+    elif ss.dr_stage == "review":
+        st.markdown("### Literature Review Generated")
+
+        # Display the review
+        st.markdown(ss.dr_final_review)
+
+        # References section
+        with st.expander("📚 References", expanded=False):
+            st.markdown(ss.dr_references)
+
+        # Search results by knowledge point
+        with st.expander("🔍 Documents by Knowledge Point", expanded=False):
+            if ss.dr_search_results:
+                for kp_id, docs in ss.dr_search_results.items():
+                    st.markdown(f"**{kp_id}** ({len(docs)} documents)")
+                    for doc in docs:
+                        metadata = doc.metadata
+                        title = metadata.get('title', 'Unknown')
+                        year = metadata.get('year', 'N/A')
+                        doi = metadata.get('doi', '')
+                        if doi:
+                            st.markdown(f"- {title} ({year}) - [DOI](https://doi.org/{doi})")
+                        else:
+                            st.markdown(f"- {title} ({year})")
+                    st.markdown("---")
+
+        # Action buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Start New Research", type="primary"):
+                reset_deep_research()
+                st.rerun()
+        with col2:
+            # Download button
+            st.download_button(
+                label="📥 Download Review",
+                data=ss.dr_final_review,
+                file_name="literature_review.md",
+                mime="text/markdown"
+            )
+
+    # Sidebar button to reset deep research
+    with st.sidebar:
+        if ss.dr_stage != "initial":
+            st.sidebar.markdown("---")
+            if st.sidebar.button("🔄 Reset Deep Research"):
+                reset_deep_research()
+                st.rerun()
