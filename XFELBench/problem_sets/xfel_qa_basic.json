@@ -1,0 +1,91 @@
+{
+  "metadata": {
+    "name": "XFEL Basic Q&A",
+    "description": "Basic questions about XFEL facilities, techniques, and concepts",
+    "version": "1.0",
+    "created_date": "2025-01-01",
+    "num_questions": 10
+  },
+  "questions": [
+    {
+      "id": "basic_001",
+      "question": "What is Serial Femtosecond Crystallography (SFX)?",
+      "category": "technique",
+      "difficulty": "basic",
+      "expected_topics": ["SFX", "crystallography", "femtosecond", "data collection"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_002",
+      "question": "What are the main XFEL facilities worldwide?",
+      "category": "facility",
+      "difficulty": "basic",
+      "expected_topics": ["LCLS", "SACLA", "European XFEL", "SHINE", "SwissFEL"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_003",
+      "question": "What is the typical photon energy range of XFEL?",
+      "category": "parameter",
+      "difficulty": "basic",
+      "expected_topics": ["photon energy", "wavelength", "X-ray"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_004",
+      "question": "How does SASE work in X-ray FELs?",
+      "category": "physics",
+      "difficulty": "intermediate",
+      "expected_topics": ["SASE", "self-amplified spontaneous emission", "undulator"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_005",
+      "question": "What is Single Particle Imaging (SPI)?",
+      "category": "technique",
+      "difficulty": "basic",
+      "expected_topics": ["SPI", "single particle", "imaging", "reconstruction"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_006",
+      "question": "What detectors are commonly used at XFEL facilities?",
+      "category": "instrumentation",
+      "difficulty": "intermediate",
+      "expected_topics": ["detector", "AGIPD", "JUNGFRAU", "ePix", "pnCCD"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_007",
+      "question": "What is the pulse duration of XFEL?",
+      "category": "parameter",
+      "difficulty": "basic",
+      "expected_topics": ["pulse duration", "femtosecond", "temporal resolution"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_008",
+      "question": "What is the difference between SASE and seeded FEL?",
+      "category": "physics",
+      "difficulty": "intermediate",
+      "expected_topics": ["SASE", "seeding", "FEL", "coherence"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_009",
+      "question": "What sample delivery methods are used in SFX experiments?",
+      "category": "technique",
+      "difficulty": "intermediate",
+      "expected_topics": ["sample delivery", "liquid jet", "LCP", "fixed target"],
+      "reference_answer": null
+    },
+    {
+      "id": "basic_010",
+      "question": "What is the repetition rate of LCLS-II?",
+      "category": "facility",
+      "difficulty": "intermediate",
+      "expected_topics": ["LCLS-II", "repetition rate", "MHz"],
+      "reference_answer": null
+    }
+  ]
+}

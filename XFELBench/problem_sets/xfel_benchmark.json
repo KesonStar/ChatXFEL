@@ -1,0 +1,312 @@
+{
+  "benchmark_info": {
+    "name": "XFELBench",
+    "version": "1.0",
+    "description": "Benchmark dataset for evaluating XFEL domain knowledge Q&A systems",
+    "total_questions": 14,
+    "answered_questions": 9,
+    "open_questions": 5,
+    "categories": ["Detectors", "Single Particle Imaging", "Timing Diagnostics", "Machine Learning", "Data Acquisition", "Sample Delivery", "Wavefront Sensing"],
+    "facilities": ["European XFEL", "LCLS", "LCLS-II"]
+  },
+  "questions": [
+    {
+      "id": "QA-1",
+      "type": "answered",
+      "category": "Detectors",
+      "facility": "European XFEL",
+      "difficulty": "medium",
+      "question": "Why can the AGIPD (Adaptive Gain Integrating Pixel Detector) operate at MHz repetition rates at the European XFEL, and what are the main design trade-offs?",
+      "reference_answer": "AGIPD is specifically designed for the European XFEL pulse structure, which consists of pulse trains at 10 Hz with intra-train repetition rates up to several MHz. The detector uses in-pixel analog memory to store multiple images during a pulse train, enabling data acquisition at MHz rates without immediate readout. After each train, data are read out during the inter-train gap.\n\nTo achieve both single-photon sensitivity and very large dynamic range, AGIPD employs adaptive gain switching, automatically adjusting pixel gain depending on signal strength.\n\nThe main trade-offs include increased pixel complexity, limited pixel fill factor, higher power consumption, and more complex calibration procedures due to multi-gain operation and radiation hardness requirements.",
+      "keywords": ["AGIPD", "MHz repetition rate", "adaptive gain", "pixel detector", "pulse train", "dynamic range"],
+      "evaluation_criteria": {
+        "key_points": [
+          "In-pixel analog memory for burst-mode acquisition",
+          "Adaptive gain switching mechanism",
+          "Trade-offs: pixel complexity, fill factor, power consumption, calibration"
+        ],
+        "required_concepts": ["pulse train structure", "MHz acquisition", "dynamic range"]
+      }
+    },
+    {
+      "id": "QA-2",
+      "type": "answered",
+      "category": "Single Particle Imaging",
+      "facility": "European XFEL",
+      "difficulty": "hard",
+      "question": "In MHz single-particle imaging (SPI) experiments at the European XFEL, why are detector noise and background stability as critical as high repetition rate?",
+      "reference_answer": "SPI relies on collecting and classifying a very large number of weak diffraction patterns, often close to the single-photon limit. Detector noise directly affects the ability to distinguish true photon hits from electronic background, influencing hit finding, orientation recovery, and final reconstruction quality.\n\nBackground instability introduces systematic errors in background subtraction, which propagate through classification and averaging steps. At MHz repetition rates, even small instabilities are amplified by the enormous data volume, leading to biased reconstructions or reduced achievable resolution.",
+      "keywords": ["SPI", "single-particle imaging", "detector noise", "background stability", "single-photon limit", "systematic errors"],
+      "evaluation_criteria": {
+        "key_points": [
+          "SPI operates at single-photon limit",
+          "Noise affects hit finding and reconstruction",
+          "Background instability amplified at MHz rates",
+          "Systematic errors propagate through data processing"
+        ],
+        "required_concepts": ["weak diffraction patterns", "background subtraction", "data volume challenges"]
+      }
+    },
+    {
+      "id": "QA-3",
+      "type": "answered",
+      "category": "Timing Diagnostics",
+      "facility": "General",
+      "difficulty": "medium",
+      "question": "How does an arrival time monitor convert femtosecond timing jitter between XFEL and optical laser pulses into a measurable signal?",
+      "reference_answer": "Arrival time monitors typically exploit XFEL-induced ultrafast changes in a material's optical properties. A small fraction of the XFEL pulse excites the material, while a synchronized optical probe pulse samples the induced transient response.\n\nBy using temporal-to-spatial or temporal-to-spectral encoding (for example, with a chirped optical pulse), the relative arrival time between XFEL and optical laser pulses is mapped onto a measurable spatial position or wavelength shift on a camera. This allows shot-by-shot timing information to be recorded and used to correct pump–probe data.",
+      "keywords": ["arrival time monitor", "timing jitter", "temporal encoding", "chirped pulse", "pump-probe"],
+      "evaluation_criteria": {
+        "key_points": [
+          "XFEL-induced optical property changes",
+          "Temporal-to-spatial/spectral encoding",
+          "Shot-by-shot timing measurement",
+          "Pump-probe correction"
+        ],
+        "required_concepts": ["ultrafast dynamics", "transient response", "encoding schemes"]
+      }
+    },
+    {
+      "id": "QA-4",
+      "type": "answered",
+      "category": "Timing Diagnostics",
+      "facility": "General",
+      "difficulty": "medium",
+      "question": "What is the principle of a self-referenced in-situ arrival time monitor, and what systematic errors does it reduce compared to external diagnostics?",
+      "reference_answer": "A self-referenced in-situ arrival time monitor measures the relative delay between XFEL and optical laser pulses directly at or very near the experimental interaction point. By using common optical paths or dual reference pulses with a fixed internal delay, it minimizes sensitivity to slow drifts such as thermal or mechanical instabilities.\n\nCompared to diagnostics placed on separate beamlines, this approach reduces systematic errors arising from non-common beam paths and ensures that the measured timing corresponds more accurately to the actual pump–probe delay experienced by the sample.",
+      "keywords": ["self-referenced", "in-situ", "common path", "systematic errors", "thermal drift"],
+      "evaluation_criteria": {
+        "key_points": [
+          "Measurement at interaction point",
+          "Common optical path reduces drift errors",
+          "Comparison with external diagnostics",
+          "Improved accuracy for actual pump-probe delay"
+        ],
+        "required_concepts": ["systematic errors", "path-length stability", "in-situ diagnostics"]
+      }
+    },
+    {
+      "id": "QA-5",
+      "type": "answered",
+      "category": "Machine Learning",
+      "facility": "LCLS",
+      "difficulty": "medium",
+      "question": "Why are machine learning methods particularly effective for accelerator tuning and beamline optimization at LCLS and LCLS-II?",
+      "reference_answer": "XFEL accelerators are high-dimensional, nonlinear systems with strong parameter coupling and noisy diagnostics. Machine learning models, such as surrogate models combined with Bayesian optimization or reinforcement learning, can efficiently explore parameter space with far fewer measurements than manual scans.\n\nThese approaches enable faster tuning, improved stability, adaptive compensation of drifts, and automated optimization under operational constraints, which is especially valuable at high repetition rates and during user operations.",
+      "keywords": ["machine learning", "accelerator tuning", "Bayesian optimization", "reinforcement learning", "parameter optimization"],
+      "evaluation_criteria": {
+        "key_points": [
+          "High-dimensional nonlinear systems",
+          "Efficient parameter space exploration",
+          "Faster tuning and stability improvement",
+          "Adaptive compensation and automation"
+        ],
+        "required_concepts": ["surrogate models", "parameter coupling", "optimization efficiency"]
+      }
+    },
+    {
+      "id": "QA-6",
+      "type": "answered",
+      "category": "Data Acquisition",
+      "facility": "LCLS-II",
+      "difficulty": "medium",
+      "question": "What new data acquisition and analysis challenges are introduced by LCLS-II compared to the original LCLS?",
+      "reference_answer": "LCLS-II increases the repetition rate from up to 120 Hz to as high as 1 MHz, leading to orders-of-magnitude higher data rates. This creates challenges in real-time data reduction, storage bandwidth, and offline analysis scalability.\n\nTo address these challenges, LCLS-II relies on streaming architectures, on-the-fly data filtering, heterogeneous computing (CPU/GPU), and closer integration between detectors, data acquisition systems, and analysis pipelines.",
+      "keywords": ["LCLS-II", "high repetition rate", "data rate", "streaming architecture", "heterogeneous computing"],
+      "evaluation_criteria": {
+        "key_points": [
+          "120 Hz to 1 MHz increase",
+          "Data rate and storage challenges",
+          "Streaming and on-the-fly filtering",
+          "CPU/GPU heterogeneous computing"
+        ],
+        "required_concepts": ["data reduction", "scalability", "real-time processing"]
+      }
+    },
+    {
+      "id": "QA-7",
+      "type": "answered",
+      "category": "Facility Design",
+      "facility": "European XFEL",
+      "difficulty": "easy",
+      "question": "How does the pulse train structure of the European XFEL influence detector and experiment design?",
+      "reference_answer": "The European XFEL delivers bursts of up to thousands of pulses at MHz repetition rates, followed by long gaps between pulse trains. Detectors must therefore support burst-mode acquisition with local storage, while experiments must tolerate non-uniform temporal sampling.\n\nThis structure strongly affects detector electronics, synchronization systems, and data analysis strategies, requiring train-aware calibration, buffering, and metadata handling.",
+      "keywords": ["pulse train", "burst-mode", "MHz repetition", "temporal sampling", "synchronization"],
+      "evaluation_criteria": {
+        "key_points": [
+          "Burst structure with gaps",
+          "Burst-mode acquisition requirement",
+          "Non-uniform temporal sampling",
+          "Train-aware systems design"
+        ],
+        "required_concepts": ["pulse train structure", "local storage", "metadata handling"]
+      }
+    },
+    {
+      "id": "QA-8",
+      "type": "answered",
+      "category": "Beam Stability",
+      "facility": "General",
+      "difficulty": "easy",
+      "question": "Why is beam stability particularly important for hard X-ray experiments?",
+      "reference_answer": "Hard X-ray experiments often probe subtle structural changes or weak scattering signals. Fluctuations in photon energy, pulse energy, beam position, or wavefront can significantly degrade data quality.\n\nAt Hard X-ray FEL, maintaining high stability is essential for reproducible pump–probe measurements, high-resolution diffraction, and precision spectroscopy, especially when operating near damage thresholds or at low signal levels.",
+      "keywords": ["beam stability", "hard X-ray", "photon energy", "pulse energy", "beam position"],
+      "evaluation_criteria": {
+        "key_points": [
+          "Subtle signals in hard X-ray experiments",
+          "Multiple sources of fluctuation",
+          "Impact on data quality",
+          "Critical for precision measurements"
+        ],
+        "required_concepts": ["stability requirements", "weak signals", "damage thresholds"]
+      }
+    },
+    {
+      "id": "QA-9",
+      "type": "answered",
+      "category": "Timing Diagnostics",
+      "facility": "General",
+      "difficulty": "medium",
+      "question": "Why is shot-by-shot timing correction preferred over statistical averaging in XFEL pump–probe experiments?",
+      "reference_answer": "XFEL timing jitter between X-ray and optical pulses can be comparable to or larger than the timescales of ultrafast dynamics under study. Statistical averaging without correction effectively blurs temporal resolution.\n\nShot-by-shot timing correction allows experimental data to be re-binned according to the true pump–probe delay, restoring femtosecond or even sub-femtosecond temporal resolution.",
+      "keywords": ["timing jitter", "shot-by-shot correction", "temporal resolution", "pump-probe", "statistical averaging"],
+      "evaluation_criteria": {
+        "key_points": [
+          "Jitter comparable to dynamics timescales",
+          "Averaging blurs temporal resolution",
+          "Re-binning by true delay",
+          "Restoration of femtosecond resolution"
+        ],
+        "required_concepts": ["timing jitter", "temporal resolution", "data re-binning"]
+      }
+    },
+    {
+      "id": "Q-10",
+      "type": "open",
+      "category": "Timing Diagnostics",
+      "facility": "European XFEL, LCLS",
+      "difficulty": "hard",
+      "question": "Relative arrival time of X-ray and optical laser can be measured by spectral and spatial encoding schemes at low repetition rate XFEL, but what are the challenges for the measurement at high repetition XFEL sources? How does European XFEL or LCLS address this problem?",
+      "reference_answer": null,
+      "keywords": ["arrival time", "spectral encoding", "spatial encoding", "high repetition rate", "timing measurement"],
+      "evaluation_criteria": {
+        "expected_topics": [
+          "Bandwidth limitations of encoding schemes",
+          "Data acquisition speed at MHz rates",
+          "Camera readout constraints",
+          "European XFEL solutions (e.g., burst-mode cameras)",
+          "LCLS-II timing distribution system",
+          "Trade-offs between accuracy and speed"
+        ],
+        "complexity": "Requires understanding of both timing diagnostics and high-rate data acquisition"
+      }
+    },
+    {
+      "id": "Q-11",
+      "type": "open",
+      "category": "Spectroscopy",
+      "facility": "General",
+      "difficulty": "hard",
+      "question": "How to resolve the Resonant Auger scattering of a highly distorted molecule in time?",
+      "reference_answer": null,
+      "keywords": ["Resonant Auger", "time-resolved", "distorted molecule", "spectroscopy"],
+      "evaluation_criteria": {
+        "expected_topics": [
+          "Resonant Auger electron spectroscopy principles",
+          "Time-resolved pump-probe approach",
+          "Structural distortion effects on electronic states",
+          "Core-hole lifetime considerations",
+          "Experimental challenges and techniques"
+        ],
+        "complexity": "Requires deep understanding of ultrafast spectroscopy and electronic structure"
+      }
+    },
+    {
+      "id": "Q-12",
+      "type": "open",
+      "category": "Timing Diagnostics",
+      "facility": "General",
+      "difficulty": "medium",
+      "question": "Is it possible to use seed laser and seeded FEL for pump to solve the temporal jitter problem in case of pump-probe experiments, although the pulse durations of seed laser and seeded FEL are significantly longer than expected?",
+      "reference_answer": null,
+      "keywords": ["seeded FEL", "seed laser", "temporal jitter", "pump-probe", "pulse duration"],
+      "evaluation_criteria": {
+        "expected_topics": [
+          "Seeded FEL principles and timing stability",
+          "Inherent synchronization between seed and FEL",
+          "Trade-off between jitter and pulse duration",
+          "Temporal resolution limitations",
+          "Applicability to different experiment types",
+          "Alternative approaches"
+        ],
+        "complexity": "Requires understanding of FEL physics and pump-probe techniques"
+      }
+    },
+    {
+      "id": "Q-13",
+      "type": "open",
+      "category": "Sample Delivery",
+      "facility": "General",
+      "difficulty": "medium",
+      "question": "There are three primary sample delivery systems in Serial crystallography: fixed-targets, liquid injection, and hybrid methods. Please give a comparison of these three systems in detail, especially including their advantages and limitations.",
+      "reference_answer": null,
+      "keywords": ["serial crystallography", "sample delivery", "fixed-target", "liquid injection", "hybrid methods"],
+      "evaluation_criteria": {
+        "expected_topics": [
+          "Fixed-target: high hit rate, sample consumption, automation",
+          "Liquid injection: continuous delivery, flow rates, clogging",
+          "Hybrid methods: combining advantages",
+          "Sample consumption comparison",
+          "Data collection efficiency",
+          "Compatibility with different crystal sizes",
+          "Cost and complexity trade-offs"
+        ],
+        "complexity": "Requires comprehensive knowledge of sample delivery technologies"
+      }
+    },
+    {
+      "id": "Q-14",
+      "type": "open",
+      "category": "Wavefront Sensing",
+      "facility": "LCLS",
+      "difficulty": "hard",
+      "question": "What is wavefront sensing and why it is important for XFEL? How many techniques are used for wavefront sensing at LCLS? What are the advantages and disadvantages for those techniques? Are there any trade-offs between them?",
+      "reference_answer": null,
+      "keywords": ["wavefront sensing", "LCLS", "beam diagnostics", "coherence", "focusing"],
+      "evaluation_criteria": {
+        "expected_topics": [
+          "Wavefront sensing definition and importance",
+          "Impact on coherent imaging and focusing",
+          "LCLS techniques (e.g., Hartmann sensor, speckle tracking, ptychography)",
+          "Resolution vs. acquisition time trade-offs",
+          "Invasive vs. non-invasive methods",
+          "Radiation damage considerations",
+          "Online vs. offline diagnostics"
+        ],
+        "complexity": "Requires understanding of X-ray optics and diagnostic techniques"
+      }
+    }
+  ],
+  "evaluation_metrics": {
+    "factual_accuracy": {
+      "description": "Does the answer contain correct factual information?",
+      "weight": 0.3
+    },
+    "completeness": {
+      "description": "Does the answer cover all key points in the reference?",
+      "weight": 0.25
+    },
+    "technical_depth": {
+      "description": "Does the answer demonstrate appropriate technical understanding?",
+      "weight": 0.25
+    },
+    "clarity": {
+      "description": "Is the answer well-structured and clearly explained?",
+      "weight": 0.1
+    },
+    "relevance": {
+      "description": "Does the answer directly address the question?",
+      "weight": 0.1
+    }
+  }
+}

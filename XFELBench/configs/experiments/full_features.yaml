@@ -1,0 +1,60 @@
+# Full Features Configuration
+# All advanced features enabled for maximum performance
+
+experiment:
+  name: "full_features"
+  description: "All features enabled: Query Rewrite + Hybrid Search + Reranking + Routing"
+  version: "1.0"
+
+model:
+  llm_name: "Qwen3-30B-Instruct"
+  embedding_model: "BGE-M3"
+  temperature: 0.1
+  num_predict: 2048
+  num_ctx: 8192
+
+database:
+  milvus:
+    host: "10.19.48.181"
+    port: 19530
+    username: "cs286_2025_group8"
+    password: "Group8"
+    db_name: "cs286_2025_group8"
+
+collection:
+  name: "xfel_bibs_collection_with_abstract"
+
+year_filter:
+  enabled: true
+  start_year: 2000
+  end_year: 2025
+
+features:
+  query_rewrite:
+    enabled: true
+  hybrid_search:
+    enabled: true
+    dense_weight: 0.5
+    sparse_weight: 0.5
+  rerank:
+    enabled: true
+    model: "BAAI/bge-reranker-v2-m3"
+    top_n: 6
+  routing:
+    enabled: true
+    fulltext_top_k: 6
+  chat_history:
+    enabled: false
+
+retrieval:
+  top_k: 10
+  search_params:
+    ef: 20
+
+prompt:
+  template_file: "prompts/naive.pt"
+
+evaluation:
+  batch_size: 10
+  save_sources: true
+  save_rewritten_queries: true

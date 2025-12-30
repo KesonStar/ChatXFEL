@@ -1,0 +1,82 @@
+# Default Configuration for XFELBench Evaluation
+# This config defines the RAG pipeline settings for evaluation
+
+# Experiment metadata
+experiment:
+  name: "default"
+  description: "Baseline RAG configuration with minimal features"
+  version: "1.0"
+
+# Model configuration
+model:
+  llm_name: "Qwen3-30B-Instruct"  # Model name for Ollama
+  embedding_model: "BGE-M3"  # Embedding model
+  temperature: 0.1  # Lower temperature for more deterministic outputs
+  num_predict: 2048  # Max output tokens
+  num_ctx: 8192  # Context window size
+
+# Database configuration
+database:
+  milvus:
+    host: "10.19.48.181"
+    port: 19530
+    username: "cs286_2025_group8"
+    password: "Group8"
+    db_name: "cs286_2025_group8"
+  mongodb:
+    host: "localhost"
+    port: 27017
+    db_name: "test_doi"
+
+# Collection configuration
+collection:
+  name: "xfel_bibs_collection_with_abstract"  # Default collection
+
+# Year filter
+year_filter:
+  enabled: false
+  start_year: 2000
+  end_year: 2025
+
+# Feature toggles
+features:
+  # Query Rewrite: Rewrite user queries using LLM before retrieval
+  query_rewrite:
+    enabled: false
+
+  # Hybrid Search: Combine dense + sparse vector search with RRF
+  hybrid_search:
+    enabled: false
+    dense_weight: 0.5
+    sparse_weight: 0.5
+
+  # Reranking: Use cross-encoder to rerank retrieved documents
+  rerank:
+    enabled: true
+    model: "BAAI/bge-reranker-v2-m3"
+    top_n: 6  # Number of documents to keep after reranking
+
+  # Routing: Two-stage retrieval (abstract -> DOI-filtered fulltext)
+  routing:
+    enabled: false
+    fulltext_top_k: 6
+
+  # Chat History: Include conversation context
+  chat_history:
+    enabled: false
+
+# Retrieval configuration
+retrieval:
+  top_k: 10  # Initial retrieval count (before reranking)
+  search_params:
+    ef: 20  # HNSW search parameter
+
+# Prompt configuration
+prompt:
+  template_file: "prompts/naive.pt"  # Path to prompt template file
+
+# Evaluation settings
+evaluation:
+  batch_size: 10  # Number of questions to process before saving checkpoint
+  save_sources: true  # Whether to save retrieved source documents
+  save_rewritten_queries: true  # Whether to save rewritten queries

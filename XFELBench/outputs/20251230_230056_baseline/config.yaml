@@ -1,0 +1,46 @@
+collection:
+  name: xfel_bibs_collection_with_abstract
+database:
+  milvus:
+    db_name: cs286_2025_group8
+    host: 10.19.48.181
+    password: Group8
+    port: 19530
+    username: cs286_2025_group8
+evaluation:
+  batch_size: 10
+  save_rewritten_queries: false
+  save_sources: true
+experiment:
+  description: Baseline with only dense search and reranking
+  name: baseline
+  version: '1.0'
+features:
+  chat_history:
+    enabled: false
+  hybrid_search:
+    enabled: false
+  query_rewrite:
+    enabled: false
+  rerank:
+    enabled: true
+    model: BAAI/bge-reranker-v2-m3
+    top_n: 6
+  routing:
+    enabled: false
+model:
+  embedding_model: BGE-M3
+  llm_name: Qwen3-30B-Instruct
+  num_ctx: 8192
+  num_predict: 2048
+  temperature: 0.1
+prompt:
+  template_file: prompts/naive.pt
+retrieval:
+  search_params:
+    ef: 20
+  top_k: 10
+year_filter:
+  enabled: true
+  end_year: 2025
+  start_year: 2000
