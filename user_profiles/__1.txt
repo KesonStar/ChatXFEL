@@ -1,0 +1,5 @@
+User focuses on high-repetition-rate XFEL timing diagnostics, particularly spectral and spatial encoding techniques for relative X-ray/optical arrival time measurement.  
+User has advanced technical knowledge in XFEL instrumentation, with interest in challenges like shot-to-shot jitter, low fluence per pulse, and single-shot detection at MHz rates.  
+User is deeply engaged with experimental implementations at European XFEL and LCLS-II, including PAM systems, chirped laser pulses, and interferometric detection.  
+User values precise, detailed, and technically rigorous explanations with specific performance metrics (e.g., sub-25 fs jitter, 564 kHz detector rates).  
+User prefers structured, fact-driven responses with clear distinctions between techniques and their limitations.

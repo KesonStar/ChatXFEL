@@ -753,37 +753,17 @@ def get_contextualize_question(llm, history_prompt_template, input_: dict):
         history_context = input_['question']
     return history_context
 
-def retrieve_generate(question, llm, prompt, retriever, history=None, return_source=True, return_chain=False, use_query_rewrite=False):
+def retrieve_generate(question, llm, prompt, retriever, user_profile="", history=None, return_source=True, return_chain=False, use_query_rewrite=False):
     """
     question
         │
         ▼
-    Retriever (检索 Milvus 文献 chunks)
-        │
-        ▼
-    文献 chunks + 原始 question 打包成一个 dict
-        │
-        ▼
-    RunnablePassthrough.assign(context=format_docs())
-    （把文献列表转换成一大段文本）
-        │
-        ▼
-    prompt （把 context 和 question 放进 prompt 模板）
-        │
-        ▼
-    LLM (Ollama)
-        │
-        ▼
-    StrOutputParser （把 LLM 输出变成字符串）
-        │
-        ▼
-    最终返回 answer
-
+    ... (注释略)
     """
     
     # use_query_rewrite logic
     original_question = question
-    rewritten_question = None  # Track if query was rewritten
+    rewritten_question = None
     if use_query_rewrite:
         try:
             rewritten = rewrite_query(llm, original_question, history)
@@ -794,6 +774,10 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
             question = original_question
             rewritten_question = None
 
+    # 修改点 2：准备 RunnableLambda
+    profile_runnable = RunnableLambda(lambda x: user_profile if user_profile else "No specific user preferences.")
+    history_runnable = RunnableLambda(lambda x: history if history else "No previous conversation.")
+
     if return_source:
         rag_source = (RunnablePassthrough.assign(
             context=(lambda x: utils.format_docs(x['context'])))
@@ -802,48 +786,45 @@ def retrieve_generate(question, llm, prompt, retriever, history=None, return_sou
             | StrOutputParser()
         )
 
+        # 修改点 3：构建 inputs 字典，必须包含 user_profile
+        inputs = {
+            'context': retriever,
+            'question': RunnablePassthrough(),
+            'history': history_runnable,      # 对应 Prompt 中的 {history}
+            'user_profile': profile_runnable  # 对应 Prompt 中的 {user_profile}
+        }
+
         if history:
-            # Wrap history string in RunnableLambda to make it compatible with RunnableParallel
-            history_runnable = RunnableLambda(lambda x: history)
-            rag_chain = RunnableParallel(
-                {'context':retriever, 'history':history_runnable, 'question':RunnablePassthrough()}).assign(
-                    answer=rag_source)
-        else:
-            rag_chain = RunnableParallel(
-                {'context':retriever, 'question':RunnablePassthrough()}).assign(
-                    answer=rag_source)
+             # 这段其实可以简化，上面的 inputs 已经包含了 history
+             pass 
+
+        rag_chain = RunnableParallel(inputs).assign(answer=rag_source)
 
     else:
-        if history:
-            # Wrap history string in RunnableLambda to make it compatible with RunnableParallel
-            history_runnable = RunnableLambda(lambda x: history)
-            rag_chain = ({'context':retriever, 'history':history_runnable, 'question':RunnablePassthrough()}
-                         | prompt | llm)
-        else:
-            rag_chain = ({'context':retriever, 'question':RunnablePassthrough()}
-                         | prompt | llm)
+        # 修改点 4：return_source=False 的分支也要包含 user_profile
+        inputs = {
+            'context': retriever,
+            'question': RunnablePassthrough(),
+            'history': history_runnable,
+            'user_profile': profile_runnable
+        }
+        rag_chain = (inputs | prompt | llm)
 
     if return_chain:
         return rag_chain
     else:
         answer = rag_chain.invoke(question)
 
-        # Strip thinking tags from thinking models (e.g., qwen3-30B-thinking)
-        # This removes CoT content before </think> tag
+        # Strip thinking tags logic...
         if isinstance(answer, dict):
-            # When return_source=True, answer is a dict with 'answer' key
             if 'answer' in answer:
                 answer['answer'] = utils.strip_thinking_tags(answer['answer'])
         elif hasattr(answer, 'content'):
-            # When return_source=False, answer might be an AIMessage
             answer.content = utils.strip_thinking_tags(answer.content)
         elif isinstance(answer, str):
-            # When return_source=False, answer might be a string
             answer = utils.strip_thinking_tags(answer)
 
-        # Add rewritten query info to the answer if applicable
         if rewritten_question:
-            # Only attach when the answer is a dict (return_source=True path)
             if isinstance(answer, dict):
                 answer['rewritten_query'] = rewritten_question
         return answer

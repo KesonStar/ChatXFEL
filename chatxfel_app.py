@@ -15,6 +15,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 sys.path.append('/home/zhangxf2/LLM/llm-shine/ChatXFEL')
 import rag, utils
 from research_agent import DeepResearchAgent
+import user_profile_manager
 
 # App title
 #st.set_page_config(page_title="ChatXFEL", layout='wide')
@@ -303,6 +304,17 @@ elif "messages" not in ss:
         save_conversation_store(ss.conversation_store)
     activate_conversation(convo)
 
+# Get client IP for user profile functionality
+ctx = get_script_run_ctx()
+client_ip = '127.0.0.1' # 默认值
+if ctx:
+    try:
+        session = st.runtime.get_instance().get_client(ctx.session_id)
+        client_ip = session.request.remote_ip
+        # log_ip_time(ctx.session_id) # 可以之后再调用日志
+    except Exception:
+        pass
+
 with st.sidebar:
     st.title('ChatXFEL Beta 2.0')
     #st.markdown('[About ChatXFEL](https://confluence.cts.shanghaitech.edu.cn/pages/viewpage.action?pageId=129762874)')
@@ -474,9 +486,35 @@ with st.sidebar:
 
     use_routing = st.sidebar.checkbox('Enable DOI Scoped Search', key='use_routing', value=False,
                                     help="First find relevant papers (DOI), then search strictly within those papers.")
-    """
-    当前仅在xfel_bibs_collection_with_abstract这一个库中做abstract与text的检索。不过理论上是可以在两个分开的向量库中检索的
-    """
+
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🧠 Personalized Memory")
+    
+    # 1. 记忆功能开关
+    enable_memory = st.sidebar.checkbox('Enable User Profile', key='enable_memory', value=True)
+    
+    # 2. 记忆编辑器
+    if enable_memory:
+        with st.sidebar.expander("📝 View / Edit Profile", expanded=False):
+            # 直接使用之前获取的 client_ip
+            current_profile_content = user_profile_manager.load_profile(client_ip)
+            
+            new_profile_content = st.text_area(
+                "My Research Preferences:",
+                value=current_profile_content,
+                height=200,
+                placeholder="E.g., I am focusing on SFX. Please answer using Python code.",
+                key="profile_editor"
+            )
+            
+            if st.button("💾 Save Profile"):
+                if user_profile_manager.overwrite_profile(client_ip, new_profile_content):
+                    st.success("Saved!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Failed to save.")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Response Style")
@@ -817,7 +855,7 @@ def render_response(text, placeholder, stream, chars_per_sec):
         placeholder.markdown(text)
 
 # Function for generating LLaMA2 response
-def generate_llama2_response(question, use_history=False):
+def generate_llama2_response(question, use_history=False, user_profile_text=""):
     # Format chat history if enabled
     history_text = ""
     if use_history and len(ss.messages) > 1:
@@ -846,6 +884,7 @@ def generate_llama2_response(question, use_history=False):
             prompt=prompt,
             retriever=retriever,
             history=history_text,
+            user_profile=user_profile_text,
             return_source=return_source,
             return_chain=False,
             use_query_rewrite=use_query_rewrite
@@ -856,6 +895,7 @@ def generate_llama2_response(question, use_history=False):
             llm=llm,
             prompt=prompt,
             retriever=retriever,
+            user_profile=user_profile_text,
             return_source=return_source,
             return_chain=False,
             use_query_rewrite=use_query_rewrite
@@ -898,7 +938,17 @@ if research_mode == "Basic RAG":
     if ss.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = generate_llama2_response(question, use_history=enable_chat_history)
+                # [新增] 根据开关读取 Profile
+                current_profile_text = ""
+                if enable_memory:
+                    current_profile_text = user_profile_manager.load_profile(client_ip)
+                
+                # [修改] 传入 Profile
+                response = generate_llama2_response(
+                    question, 
+                    use_history=enable_chat_history,
+                    user_profile_text=current_profile_text
+                )
 
             # Display rewritten query if available
             if 'rewritten_query' in response and response['rewritten_query']:
@@ -951,7 +1001,35 @@ if research_mode == "Basic RAG":
             utils.log_rag(logs, use_mongo=use_mongo)
         ss.messages.append(message)
         persist_current_conversation()
+
+        # Save last Q&A for user profile memory functionality
+        ss['last_q_for_memory'] = question
+        ss['last_a_for_memory'] = full_response
+
         st.rerun()
+    if enable_memory and len(ss.messages) > 1 and ss.messages[-1]["role"] == "assistant":
+        with st.container():
+            col1, col2 = st.columns([2, 8])
+            
+            def on_remember_click():
+                if 'last_q_for_memory' in ss and 'last_a_for_memory' in ss:
+                    with st.spinner("Updating personalized document..."):
+                        success, content = user_profile_manager.memorize_interaction(
+                            user_id=client_ip,
+                            question=ss['last_q_for_memory'],
+                            answer=ss['last_a_for_memory'],
+                            llm=llm 
+                        )
+                        if success:
+                            ss['profile_editor'] = content
+                            st.toast("✅ Memory Updated!", icon="🧠")
+                        else:
+                            st.toast("❌ Failed to update.", icon="⚠️")
+
+            with col1:
+                st.button("🧠 Remember This", 
+                        help="Update your profile with this interaction.",
+                        on_click=on_remember_click)
 
 # ============================================================
 # DEEP RESEARCH MODE
