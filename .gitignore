@@ -28,3 +28,4 @@ XFELBench/scripts/evaluation/outputs/
 *.swo
 *~
 .chatxfel_history.json
+.DS_Store
