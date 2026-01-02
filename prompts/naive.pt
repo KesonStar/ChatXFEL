@@ -12,6 +12,11 @@ Remember the abbreviation: SHINE is short for Shanghai High Repetition Rate XFEL
 [IMPORTANT]DO NOT give references in your answers.
 [IMPORTANT]Make up mathematic equations in markdown. e.g. $c=3 \times 10^8$ m/s, $a^2+b^2=c^2$, $E^2 = m_0^2c^4+p^2c^2$
 
+[User Personalization Context]
+The following is the user's research profile and preferences. Use this to tailor your answer (but it might be None):
+{user_profile}
+
+Context:
 {context}
 
 Question: {question}

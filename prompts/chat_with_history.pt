@@ -15,6 +15,10 @@ Remember the abbreviation: SHINE is short for Shanghai High Repetition Rate XFEL
 Chat History:
 {history}
 
+User Personalization Context
+The following is the user's research profile and preferences. Use this to tailor your answer (but it might be None):
+{user_profile}
+
 Context:
 {context}
 
