@@ -16,8 +16,11 @@ from typing import Dict, Any, List, Optional
 from tqdm import tqdm
 import time
 
-# Add parent directory to path to import ChatXFEL modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add ChatXFEL root directory to path to import ChatXFEL modules
+# Current file: ChatXFEL/XFELBench/scripts/evaluation/eval_generator.py
+# Need to import from: ChatXFEL/ (go up 4 levels)
+CHATXFEL_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(CHATXFEL_ROOT))
 
 import rag
 import utils
@@ -63,7 +66,9 @@ class RAGEvaluationGenerator:
         """Create output directory for this evaluation run"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         exp_name = self.config['experiment']['name']
-        output_dir = Path(__file__).parent / 'outputs' / f"{timestamp}_{exp_name}"
+        # Use XFELBench/outputs/ directory (going up 3 levels from scripts/evaluation/)
+        xfelbench_root = Path(__file__).parent.parent.parent
+        output_dir = xfelbench_root / 'outputs' / f"{timestamp}_{exp_name}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save configuration to output directory
@@ -102,11 +107,9 @@ class RAGEvaluationGenerator:
         # 3. Initialize prompt template
         prompt_file = self.config['prompt']['template_file']
         if not os.path.isabs(prompt_file):
-            # Relative path from project root
-            prompt_file = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                prompt_file
-            )
+            # Relative path from ChatXFEL project root
+            # CHATXFEL_ROOT is defined at the top of this file
+            prompt_file = os.path.join(str(CHATXFEL_ROOT), prompt_file)
 
         with open(prompt_file, 'r', encoding='utf-8') as f:
             prompt_template = f.read()
@@ -283,30 +286,67 @@ class RAGEvaluationGenerator:
         context_docs = output.get('context', [])
         rewritten_query = output.get('rewritten_query', None)
 
-        # Format sources
+        # Format sources with detailed retrieval information
         sources = []
-        for doc in context_docs:
+        for idx, doc in enumerate(context_docs):
             source_info = {
+                'rank': idx + 1,  # Ranking position in retrieval results
                 'title': doc.metadata.get('title', ''),
                 'doi': doc.metadata.get('doi', ''),
                 'journal': doc.metadata.get('journal', ''),
                 'year': doc.metadata.get('year', ''),
                 'page': doc.metadata.get('page', ''),
-                'content': doc.page_content
+                'start_index': doc.metadata.get('start_index', ''),  # Position in original document
+                'content': doc.page_content,
+                'content_length': len(doc.page_content)  # Character count of the chunk
             }
             sources.append(source_info)
+
+        # Prepare retrieval statistics
+        retrieval_stats = {
+            'num_sources': len(sources),
+            'total_context_length': sum(len(doc.page_content) for doc in context_docs),
+            'unique_papers': len(set(doc.metadata.get('doi', '') for doc in context_docs if doc.metadata.get('doi'))),
+            'year_range': self._get_year_range(context_docs) if context_docs else None
+        }
 
         result = {
             'question_id': question_id,
             'question': question,
             'answer': answer,
             'sources': sources if self.config['evaluation']['save_sources'] else [],
+            'retrieval_stats': retrieval_stats,  # Summary statistics about retrieval
             'rewritten_query': rewritten_query if self.config['evaluation']['save_rewritten_queries'] else None,
             'generation_time': end_time - start_time,
             'timestamp': datetime.now().isoformat()
         }
 
         return result
+
+    def _get_year_range(self, context_docs: List) -> Dict[str, Any]:
+        """
+        Calculate year range of retrieved documents.
+
+        Args:
+            context_docs: List of retrieved documents
+
+        Returns:
+            Dictionary with min_year, max_year, and year distribution
+        """
+        years = []
+        for doc in context_docs:
+            year = doc.metadata.get('year')
+            if year and isinstance(year, (int, float)):
+                years.append(int(year))
+
+        if not years:
+            return None
+
+        return {
+            'min': min(years),
+            'max': max(years),
+            'span': max(years) - min(years)
+        }
 
     def run_evaluation(self, question_file: str):
         """

@@ -1,307 +1,268 @@
-# XFELBench - ChatXFEL Evaluation Framework
+# XFELBench - XFEL RAG Evaluation Benchmark
 
-XFELBench is a comprehensive evaluation framework for the ChatXFEL RAG system. It allows you to systematically test different RAG configurations and measure their performance on curated question sets.
+完整的RAG系统评估框架，支持自动配置生成、批量评估和LLM评判打分。
 
-## Features
+## 快速开始
 
-- **Configurable RAG Pipeline**: Toggle features like query rewrite, hybrid search, reranking, and routing
-- **Batch Evaluation**: Process multiple questions with automatic checkpointing
-- **Detailed Results**: Save answers, sources, rewritten queries, and generation times
-- **Multiple Experiments**: Compare different configurations side-by-side
+```bash
+# 1. 设置OpenAI API密钥
+export OPENAI_API_KEY="your-key-here"
 
-## Directory Structure
+# 2. 运行完整评估pipeline（推荐）
+./bin/run_all.sh
+
+# 3. 或者快速测试
+./bin/quick_test.sh
+```
+
+## 目录结构
 
 ```
 XFELBench/
-├── configs/                    # Configuration files
-│   ├── default.yaml           # Default baseline configuration
-│   └── experiments/           # Experiment-specific configs
-│       ├── baseline.yaml      # Minimal features (dense + rerank)
-│       ├── hybrid_search.yaml # Hybrid search enabled
-│       └── full_features.yaml # All features enabled
-├── problem_sets/              # Question datasets
-│   └── xfel_qa_basic.json    # Basic XFEL Q&A (10 questions)
-├── outputs/                   # Evaluation results (auto-generated)
-│   └── <timestamp>_<exp_name>/
-│       ├── config.yaml       # Configuration used for this run
-│       ├── results.jsonl     # Per-question results (JSONL format)
-│       └── summary.json      # Summary statistics
-├── eval_generator.py          # Answer generation script
-└── README.md                  # This file
+├── README.md                    # 本文件
+├── bin/                         # 可执行脚本
+│   ├── run_all.sh              # 一键运行完整pipeline
+│   ├── quick_test.sh           # 快速测试
+│   └── example_evaluation.sh   # LLM评判示例
+├── scripts/                     # Python脚本
+│   ├── evaluation/             # 评估相关
+│   │   ├── eval_generator.py  # RAG答案生成器
+│   │   ├── llm_judge.py       # LLM评判器
+│   │   └── compare_results.py # 结果比较工具
+│   ├── generation/             # 生成相关
+│   │   ├── generate_configs.py # 配置生成器
+│   │   └── test_generator.py   # 测试生成器
+│   └── orchestration/          # 主控脚本
+│       ├── run_full_evaluation.py  # 完整评估流程
+│       └── analyze_results.py      # 结果分析
+├── docs/                        # 文档
+│   ├── FULL_PIPELINE_README.md # 完整pipeline文档
+│   ├── LLM_JUDGE_README.md     # LLM评判器文档
+│   └── FILES_CREATED.md        # 文件清单
+├── configs/                     # 配置文件
+│   ├── experiments/            # 实验配置
+│   └── generated/              # 自动生成的配置
+├── problem_sets/                # 问题集
+├── outputs/                     # RAG输出结果
+├── evaluations/                 # LLM评判结果
+└── prompts/                     # 提示词模板
 ```
 
-## Quick Start
+## 主要功能
 
-### 1. Run a Single Evaluation
+### 1. 自动配置生成
 
-Generate answers using the baseline configuration:
+生成12个预定义的RAG配置，涵盖不同的检索策略：
 
 ```bash
-cd XFELBench
-python eval_generator.py \
-    --config configs/experiments/baseline.yaml \
-    --questions problem_sets/xfel_qa_basic.json
+python scripts/generation/generate_configs.py
+
+# 列出所有可用配置
+python scripts/generation/generate_configs.py --list
 ```
 
-### 2. Run Multiple Experiments
+**可用配置**:
+- `baseline` - 基线（Dense + Reranking）
+- `hybrid_search` - 混合搜索（Dense + Sparse）
+- `query_rewrite` - 查询重写
+- `routing` - 两阶段路由
+- `full_features` - 全功能
+- 等等...共12个配置
 
-Compare different configurations:
+### 2. RAG评估
+
+对每个配置生成答案：
 
 ```bash
-# Baseline (dense + rerank only)
-python eval_generator.py \
-    --config configs/experiments/baseline.yaml \
-    --questions problem_sets/xfel_qa_basic.json
-
-# Hybrid search
-python eval_generator.py \
-    --config configs/experiments/hybrid_search.yaml \
-    --questions problem_sets/xfel_qa_basic.json
-
-# All features
-python eval_generator.py \
-    --config configs/experiments/full_features.yaml \
+python scripts/evaluation/eval_generator.py \
+    --config configs/generated/baseline.yaml \
     --questions problem_sets/xfel_qa_basic.json
 ```
 
-### 3. Check Results
+### 3. LLM评判
 
-Results are saved in `outputs/<timestamp>_<experiment_name>/`:
+使用GPT-4o-mini进行三维度评分：
 
 ```bash
-# View summary statistics
-cat outputs/20250101_120000_baseline/summary.json
-
-# View detailed results (one question per line)
-cat outputs/20250101_120000_baseline/results.jsonl
+python scripts/evaluation/llm_judge.py \
+    --results outputs/20251230_230056_baseline/results.jsonl \
+    --output evaluations/baseline_eval \
+    --problem-set problem_sets/problem_set.md
 ```
 
-## Configuration Guide
+**评估维度**:
+- Factual Accuracy (1-5)
+- Groundedness / Evidence Use (1-5)
+- Coverage & Specificity (1-5)
 
-### Configuration File Structure
+### 4. 完整Pipeline
 
-A configuration file defines all aspects of the RAG pipeline:
+一键运行所有配置的评估和打分：
 
-```yaml
-# Experiment metadata
-experiment:
-  name: "my_experiment"
-  description: "Description of what this config tests"
-  version: "1.0"
+```bash
+python scripts/orchestration/run_full_evaluation.py \
+    --questions problem_sets/xfel_qa_basic.json
 
-# Model settings
-model:
-  llm_name: "Qwen3-30B-Instruct"  # Ollama model name
-  embedding_model: "BGE-M3"
-  temperature: 0.1
-  num_predict: 2048
-  num_ctx: 8192
-
-# Database connections
-database:
-  milvus:
-    host: "10.19.48.181"
-    port: 19530
-    username: "cs286_2025_group8"
-    password: "Group8"
-    db_name: "cs286_2025_group8"
-
-# Collection to search
-collection:
-  name: "xfel_bibs_collection_with_abstract"
-
-# Year filtering
-year_filter:
-  enabled: true
-  start_year: 2000
-  end_year: 2025
-
-# Feature toggles
-features:
-  query_rewrite:
-    enabled: true  # Rewrite queries using LLM
-
-  hybrid_search:
-    enabled: true  # Use dense + sparse vectors
-    dense_weight: 0.5
-    sparse_weight: 0.5
-
-  rerank:
-    enabled: true  # Rerank with cross-encoder
-    model: "BAAI/bge-reranker-v2-m3"
-    top_n: 6
-
-  routing:
-    enabled: true  # Two-stage retrieval (abstract -> fulltext)
-    fulltext_top_k: 6
-
-  chat_history:
-    enabled: false  # Include conversation context (for future use)
-
-# Retrieval settings
-retrieval:
-  top_k: 10  # Initial retrieval count
-  search_params:
-    ef: 20  # HNSW parameter
-
-# Prompt template
-prompt:
-  template_file: "prompts/naive.pt"
-
-# Evaluation settings
-evaluation:
-  batch_size: 10  # Checkpoint frequency
-  save_sources: true  # Save retrieved documents
-  save_rewritten_queries: true  # Save rewritten queries
+# 或使用shell脚本
+./bin/run_all.sh
 ```
 
-### Feature Toggle Combinations
+### 5. 结果比较
 
-Here are recommended feature combinations to test:
+对比不同配置的表现：
 
-| Configuration | Query Rewrite | Hybrid Search | Rerank | Routing | Purpose |
-|--------------|---------------|---------------|---------|---------|---------|
-| Baseline | ❌ | ❌ | ✅ | ❌ | Minimal features |
-| Hybrid Search | ❌ | ✅ | ✅ | ❌ | Test hybrid retrieval |
-| Query Rewrite | ✅ | ❌ | ✅ | ❌ | Test query optimization |
-| Routing | ❌ | ❌ | ✅ | ✅ | Test two-stage retrieval |
-| Full Features | ✅ | ✅ | ✅ | ✅ | Maximum performance |
+```bash
+python scripts/evaluation/compare_results.py
 
-## Question Set Format
+# 生成CSV报告
+python scripts/evaluation/compare_results.py --csv results.csv
 
-Question sets are defined in JSON format:
-
-```json
-{
-  "metadata": {
-    "name": "Question Set Name",
-    "description": "Description",
-    "version": "1.0",
-    "num_questions": 10
-  },
-  "questions": [
-    {
-      "id": "q_001",
-      "question": "What is XFEL?",
-      "category": "basic",
-      "difficulty": "easy",
-      "expected_topics": ["XFEL", "free electron laser"],
-      "reference_answer": null
-    }
-  ]
-}
+# 对比特定配置
+python scripts/evaluation/compare_results.py --compare baseline hybrid_search
 ```
 
-## Output Format
+## 使用示例
 
-### results.jsonl
+### 示例1：完整评估所有配置
 
-Each line contains a JSON object for one question:
+```bash
+export OPENAI_API_KEY="sk-xxx"
+./bin/run_all.sh
+```
+
+### 示例2：评估特定配置
+
+```bash
+python scripts/orchestration/run_full_evaluation.py \
+    --questions problem_sets/xfel_qa_basic.json \
+    --configs baseline hybrid_search full_features
+```
+
+### 示例3：自定义配置
+
+1. 编辑 `scripts/generation/generate_configs.py`
+2. 添加你的配置到 `EXPERIMENT_CONFIGS`
+3. 生成并运行：
+
+```bash
+python scripts/generation/generate_configs.py --configs my_config
+python scripts/orchestration/run_full_evaluation.py --configs my_config
+```
+
+## 输出说明
+
+### RAG输出 (`outputs/`)
 
 ```json
 {
   "question_id": "basic_001",
-  "question": "What is Serial Femtosecond Crystallography?",
-  "answer": "Serial Femtosecond Crystallography (SFX) is...",
-  "sources": [
-    {
-      "title": "Paper title",
-      "doi": "10.1234/example",
-      "journal": "Nature",
-      "year": "2023",
-      "page": "1",
-      "content": "Retrieved text..."
-    }
-  ],
-  "rewritten_query": "serial femtosecond crystallography technique XFEL",
-  "generation_time": 2.34,
-  "timestamp": "2025-01-01T12:00:00",
-  "metadata": {
-    "category": "technique",
-    "difficulty": "basic",
-    "expected_topics": ["SFX", "crystallography"]
+  "question": "What is SFX?",
+  "answer": "Serial Femtosecond Crystallography...",
+  "sources": [...],
+  "generation_time": 15.2
+}
+```
+
+### 评判输出 (`evaluations/`)
+
+```json
+{
+  "evaluation": {
+    "factual_accuracy": {"score": 5, "reasoning": "..."},
+    "groundedness": {"score": 4, "reasoning": "..."},
+    "coverage_specificity": {"score": 5, "reasoning": "..."},
+    "average_score": 4.67
   }
 }
 ```
 
-### summary.json
+### 汇总报告 (`evaluations/summary_*/`)
 
-Summary statistics for the entire run:
+- `comparison.json` - 所有配置的分数对比
+- `EVALUATION_REPORT.md` - 完整markdown报告
 
-```json
-{
-  "experiment_name": "baseline",
-  "total_questions": 10,
-  "completed_questions": 10,
-  "failed_questions": 0,
-  "average_generation_time": 2.45,
-  "config": { ... },
-  "timestamp": "2025-01-01T12:30:00"
-}
-```
-
-## Next Steps: LLM-as-Judge Evaluation
-
-After generating answers, you can evaluate them using:
-
-1. **Automated Metrics**: BLEU, ROUGE, BERTScore (if reference answers available)
-2. **LLM-as-Judge**: Use an LLM to score answer quality, relevance, and correctness
-3. **Human Evaluation**: Manual review and scoring
-
-The `eval_judge.py` script (to be implemented) will handle automated evaluation.
-
-## Tips
-
-### Running Multiple Experiments
-
-Create a batch script to run all experiments:
+## 命令速查
 
 ```bash
-#!/bin/bash
-QUESTIONS="problem_sets/xfel_qa_basic.json"
+# 列出可用配置
+python scripts/generation/generate_configs.py --list
 
-for config in configs/experiments/*.yaml; do
-    echo "Running experiment: $config"
-    python eval_generator.py --config "$config" --questions "$QUESTIONS"
-done
+# 生成配置
+python scripts/generation/generate_configs.py
+
+# 运行评估（所有配置）
+./bin/run_all.sh
+
+# 快速测试（2个配置）
+./bin/quick_test.sh
+
+# 比较结果
+python scripts/evaluation/compare_results.py
+
+# 查看最新报告
+cat $(ls -t evaluations/summary_*/EVALUATION_REPORT.md | head -1)
 ```
 
-### Monitoring Progress
+## 详细文档
 
-The generator uses tqdm for progress bars and prints regular status updates:
+- **完整Pipeline**: `docs/FULL_PIPELINE_README.md`
+- **LLM评判器**: `docs/LLM_JUDGE_README.md`
+- **配置路径指南**: `CONFIG_PATH_GUIDE.md` ⭐ 重要
+- **导入路径修复**: `IMPORT_FIX_SUMMARY.md`
+- **文件清单**: `docs/FILES_CREATED.md`
 
-```
-[INFO] Loaded configuration: baseline
-[INFO] Description: Baseline with only dense search and reranking
-[INFO] Loading embedding model: BGE-M3
-[INFO] Loading LLM: Qwen3-30B-Instruct
-[INFO] Initializing DENSE-ONLY retriever...
-[INFO] Adding reranker: BAAI/bge-reranker-v2-m3 (top_n=6)
-[INFO] Loaded 10 questions from problem_sets/xfel_qa_basic.json
-Generating answers: 100%|██████████| 10/10 [00:23<00:00,  2.34s/it]
-[INFO] Summary: 10/10 completed, 0 failed
-[INFO] Average generation time: 2.45s
-```
+## 依赖
 
-### Troubleshooting
+- Python 3.10+
+- OpenAI API (GPT-4o-mini)
+- PyYAML
+- 其他依赖见主项目 `requirements.txt`
 
-**Issue**: Model not found
-```
-Solution: Check that Ollama is running and the model is available:
-  ollama list
-  ollama pull qwen3:30b-a3b-instruct-2507-q8_0
-```
+## API成本
 
-**Issue**: Milvus connection failed
-```
-Solution: Verify connection parameters in config and check network access
+使用GPT-4o-mini评估：
+- 每个问题约 $0.01-0.02
+- 50题×12配置 ≈ $6-12
+
+## 故障排除
+
+### API密钥错误
+
+```bash
+export OPENAI_API_KEY="your-key"
 ```
 
-**Issue**: Out of memory
-```
-Solution: Reduce batch_size in config or use a smaller model
+### 路径问题
+
+所有脚本应从XFELBench根目录运行：
+
+```bash
+cd /path/to/ChatXFEL/XFELBench
+./bin/run_all.sh
 ```
 
-## License
+### 导入错误
 
-Part of the ChatXFEL project.
+确保Python能找到ChatXFEL模块：
+
+```bash
+# 从XFELBench根目录运行所有脚本
+cd /path/to/ChatXFEL/XFELBench
+python scripts/orchestration/run_full_evaluation.py --questions problem_sets/xfel_qa_basic.json
+```
+
+## 贡献
+
+欢迎贡献新的配置模板、评估维度或改进！
+
+## 许可
+
+与ChatXFEL主项目相同
+
+## 联系
+
+如有问题，请查看文档或联系开发团队。
+
+---
+
+**提示**: 首次使用建议先运行 `./bin/quick_test.sh` 验证设置！

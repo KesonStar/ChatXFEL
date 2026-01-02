@@ -1,0 +1,48 @@
+model:
+  llm_name: Qwen3-30B-Instruct
+  embedding_model: BGE-M3
+  temperature: 0.1
+  num_predict: 2048
+  num_ctx: 8192
+database:
+  milvus:
+    host: 10.19.48.181
+    port: 19530
+    username: cs286_2025_group8
+    password: Group8
+    db_name: cs286_2025_group8
+collection:
+  name: xfel_bibs_collection_with_abstract
+year_filter:
+  enabled: true
+  start_year: 2000
+  end_year: 2025
+retrieval:
+  top_k: 10
+  search_params:
+    ef: 20
+prompt:
+  template_file: prompts/naive.pt
+evaluation:
+  batch_size: 10
+  save_sources: true
+  save_rewritten_queries: false
+experiment:
+  name: hybrid_sparse_heavy
+  description: Hybrid search with sparse weight = 0.7
+  version: '1.0'
+features:
+  query_rewrite:
+    enabled: false
+  hybrid_search:
+    enabled: true
+    dense_weight: 0.3
+    sparse_weight: 0.7
+  rerank:
+    enabled: true
+    model: BAAI/bge-reranker-v2-m3
+    top_n: 6
+  routing:
+    enabled: false
+  chat_history:
+    enabled: false

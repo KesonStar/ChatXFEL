@@ -13,3 +13,17 @@ __pycache__/
 *.pdf
 AGENTS.md
 CLAUDE.md
+
+# XFELBench: Exclude all evaluation results and outputs
+XFELBench/outputs/
+XFELBench/evaluations/
+XFELBench/pre/outputs/
+XFELBench/pre/evaluations/
+XFELBench/scripts/evaluation/outputs/
+
+# IDE and temporary files
+.claude/
+.DS_Store
+*.swp
+*.swo
+*~

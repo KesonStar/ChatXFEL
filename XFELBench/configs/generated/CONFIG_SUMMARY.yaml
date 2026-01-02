@@ -1,0 +1,6 @@
+total_configs: 4
+configs:
+  baseline: 'Baseline: Dense search + Reranking only'
+  hybrid_search: 'Hybrid: Dense + Sparse search with reranking'
+  query_rewrite: Baseline + Query rewriting
+  full_features: 'All features: Query Rewrite + Hybrid + Reranking + Routing'
