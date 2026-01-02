@@ -18,7 +18,146 @@ from research_agent import DeepResearchAgent
 #st.set_page_config(page_title="ChatXFEL", layout='wide')
 st.set_page_config(page_title="ChatXFEL Beta 1.0", page_icon='./draw/logo.png')
 
-st.header('ChatXFEL: Q & A System for XFEL')
+def inject_css():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600;700&display=swap');
+        :root {
+            --bg: #f6f4ef;
+            --bg-accent: #efe8d9;
+            --panel: #fffaf3;
+            --panel-2: #f4eee4;
+            --border: rgba(53, 45, 32, 0.12);
+            --text: #1f1b16;
+            --muted: #6a6355;
+            --accent: #d46a4a;
+            --accent-2: #2f6d62;
+            --shadow: 0 10px 30px rgba(40, 32, 20, 0.12);
+        }
+        html, body, [class*="stApp"] {
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--text);
+        }
+        div[data-testid="stAppViewContainer"] {
+            background: radial-gradient(1200px 600px at 10% -10%, #fff6e6 0%, transparent 60%),
+                        radial-gradient(1200px 600px at 110% 10%, #e6f1ee 0%, transparent 55%),
+                        var(--bg);
+        }
+        header[data-testid="stHeader"] {
+            background: transparent;
+        }
+        #MainMenu,
+        footer {
+            visibility: hidden;
+        }
+        div.block-container {
+            max-width: 900px;
+            padding-top: 2.5rem;
+            padding-bottom: 4rem;
+        }
+        h1, h2, h3, h4 {
+            font-family: 'Fraunces', serif;
+            letter-spacing: -0.02em;
+        }
+        .hero {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            padding: 1.6rem 1.8rem;
+            border-radius: 18px;
+            margin-bottom: 1.4rem;
+        }
+        .hero-title {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 0 0 0.35rem 0;
+        }
+        .hero-subtitle {
+            color: var(--muted);
+            margin: 0 0 0.9rem 0;
+            font-size: 1rem;
+        }
+        .hero-badges span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: #f3e6d1;
+            border: 1px solid var(--border);
+            color: #513f2b;
+            border-radius: 999px;
+            padding: 0.25rem 0.7rem;
+            font-size: 0.8rem;
+            margin-right: 0.45rem;
+        }
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #f9f4ea 0%, #f1ebe0 100%);
+            border-right: 1px solid var(--border);
+        }
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3 {
+            font-family: 'Fraunces', serif;
+        }
+        section[data-testid="stSidebar"] .stButton > button {
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: #f5e8d5;
+            color: #4a3a28;
+        }
+        div[data-testid="stChatMessage"] {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 0.35rem 0.85rem;
+            box-shadow: 0 6px 20px rgba(40, 32, 20, 0.08);
+            margin-bottom: 0.75rem;
+        }
+        div[data-testid="stChatMessage"][data-message-author-role="user"] {
+            background: #eff6f4;
+            border-color: rgba(47, 109, 98, 0.3);
+        }
+        div[data-testid="stChatMessageContent"] p {
+            font-size: 1rem;
+            line-height: 1.65;
+        }
+        div[data-testid="stChatInput"] textarea {
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: #fffdf9;
+            padding: 0.8rem 1rem;
+            box-shadow: 0 8px 20px rgba(40, 32, 20, 0.08);
+        }
+        div[data-testid="stChatInput"] textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(212, 106, 74, 0.2);
+        }
+        div[data-testid="stExpander"] {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+inject_css()
+
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-title">ChatXFEL</div>
+        <div class="hero-subtitle">XFEL literature Q&amp;A with grounded citations and research modes.</div>
+        <div class="hero-badges">
+            <span>Beta</span>
+            <span>Research-ready</span>
+            <span>RAG-powered</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 if 'agree' not in ss:
     ss['agree'] = False
 def update_agree():
@@ -179,6 +318,19 @@ with st.sidebar:
     """
     当前仅在xfel_bibs_collection_with_abstract这一个库中做abstract与text的检索。不过理论上是可以在两个分开的向量库中检索的
     """
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Response Style")
+    enable_streaming = st.sidebar.checkbox('Type-out response', key='stream_response', value=True)
+    stream_speed = st.sidebar.slider(
+        'Typing speed (chars/sec)',
+        min_value=30,
+        max_value=200,
+        value=120,
+        step=10,
+        key='stream_speed',
+        disabled=not enable_streaming
+    )
 
     st.sidebar.markdown("---")
     enable_log = st.sidebar.checkbox('Enable log', key='log', value=True)
@@ -428,6 +580,8 @@ if "dr_final_review" not in ss:
     ss.dr_final_review = ""
 if "dr_references" not in ss:
     ss.dr_references = ""
+if "dr_review_streamed" not in ss:
+    ss.dr_review_streamed = False
 
 def reset_deep_research():
     """Reset all Deep Research state variables."""
@@ -439,6 +593,7 @@ def reset_deep_research():
     ss.dr_search_results = None
     ss.dr_final_review = ""
     ss.dr_references = ""
+    ss.dr_review_streamed = False
 
 @st.cache_resource
 def get_deep_research_agent(_llm, _retriever, _reranker=None):
@@ -494,6 +649,24 @@ def clear_chat_history():
     ss.messages = [initial_message]
 
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
+
+def stream_markdown(text, placeholder, chars_per_sec):
+    if not text:
+        placeholder.markdown("")
+        return
+    delay = 1.0 / max(chars_per_sec, 1)
+    rendered = ""
+    for char in text:
+        rendered += char
+        placeholder.markdown(rendered)
+        if delay:
+            time.sleep(delay)
+
+def render_response(text, placeholder, stream, chars_per_sec):
+    if stream:
+        stream_markdown(text, placeholder, chars_per_sec)
+    else:
+        placeholder.markdown(text)
 
 # Function for generating LLaMA2 response
 def generate_llama2_response(question, use_history=False):
@@ -578,44 +751,44 @@ if research_mode == "Basic RAG":
             with st.spinner("Thinking..."):
                 response = generate_llama2_response(question, use_history=enable_chat_history)
 
-                # Display rewritten query if available
-                if 'rewritten_query' in response and response['rewritten_query']:
-                    # Get the original user question (latest user turn)
-                    original_user_question = ss.messages[-1]["content"]
-                    with st.expander("Optimized Search Query", expanded=False):
-                        st.markdown("**Original Question:**")
-                        st.info(original_user_question)
-                        st.markdown("**Rewritten for Search:**")
-                        st.success(response['rewritten_query'])
+            # Display rewritten query if available
+            if 'rewritten_query' in response and response['rewritten_query']:
+                # Get the original user question (latest user turn)
+                original_user_question = ss.messages[-1]["content"]
+                with st.expander("Optimized Search Query", expanded=False):
+                    st.markdown("**Original Question:**")
+                    st.info(original_user_question)
+                    st.markdown("**Rewritten for Search:**")
+                    st.success(response['rewritten_query'])
 
-                placeholder = st.empty()
-                full_response = ''
-                source = ''
-                if return_source:
-                    full_response += response['answer']
-                    placeholder.markdown(full_response)
-                    #full_response += '\nContext: \n'
-                    for i, c in enumerate(response['context']):
-                        source += f'{c.page_content}'
-                        title = c.metadata.get('title') if 'title' in c.metadata.keys() else c.metadata.get('source')
-                        doi = c.metadata.get('doi', '')
-                        journal = c.metadata.get('journal', '')
-                        year = c.metadata.get('year', '')
-                        page = c.metadata.get('page')
-                        if doi == '':
-                            source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, page {page}'
-                        else:
-                            source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, [{doi}](http://dx.doi.org/{doi}), page {page}'
-                        if i != len(response['context'])-1:
-                            source += '\n\n'
-                        #placeholder.markdown(source)
-                        if i == len(response['context'])-1:
-                            c = st.columns([8,3])
-                            with c[0].popover('Source'):
-                                st.markdown(source)
-                else:
-                    full_response = response.content
-                    placeholder.markdown(full_response)
+            placeholder = st.empty()
+            full_response = ''
+            source = ''
+            if return_source:
+                full_response = response['answer']
+                render_response(full_response, placeholder, enable_streaming, stream_speed)
+                #full_response += '\nContext: \n'
+                for i, c in enumerate(response['context']):
+                    source += f'{c.page_content}'
+                    title = c.metadata.get('title') if 'title' in c.metadata.keys() else c.metadata.get('source')
+                    doi = c.metadata.get('doi', '')
+                    journal = c.metadata.get('journal', '')
+                    year = c.metadata.get('year', '')
+                    page = c.metadata.get('page')
+                    if doi == '':
+                        source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, page {page}'
+                    else:
+                        source += f'\n\n**Ref. {i+1}**: {title}, {journal}, {year}, [{doi}](http://dx.doi.org/{doi}), page {page}'
+                    if i != len(response['context'])-1:
+                        source += '\n\n'
+                    #placeholder.markdown(source)
+                    if i == len(response['context'])-1:
+                        c = st.columns([8,3])
+                        with c[0].popover('Source'):
+                            st.markdown(source)
+            else:
+                full_response = response.content
+                render_response(full_response, placeholder, enable_streaming, stream_speed)
 
         if return_source:
             message = {"role": "assistant", "content": full_response, "source":source}
@@ -808,6 +981,7 @@ else:
             # Generate review
             progress_bar.progress(75)
             ss.dr_final_review = dr_agent.generate_review(ss.dr_knowledge_outline, ss.dr_search_results)
+            ss.dr_review_streamed = False
 
             # Format references
             ss.dr_references = dr_agent.review_generator.format_references(ss.dr_search_results)
@@ -831,7 +1005,12 @@ else:
         st.markdown("### Literature Review Generated")
 
         # Display the review
-        st.markdown(ss.dr_final_review)
+        review_placeholder = st.empty()
+        if enable_streaming and not ss.dr_review_streamed:
+            render_response(ss.dr_final_review, review_placeholder, True, stream_speed)
+            ss.dr_review_streamed = True
+        else:
+            review_placeholder.markdown(ss.dr_final_review)
 
         # References section
         with st.expander("📚 References", expanded=False):
