@@ -27,3 +27,4 @@ XFELBench/scripts/evaluation/outputs/
 *.swp
 *.swo
 *~
+.chatxfel_history.json

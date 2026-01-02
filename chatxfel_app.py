@@ -3,7 +3,9 @@ import streamlit as st
 import sys
 import time
 import json
+import uuid
 from datetime import datetime
+from pathlib import Path
 from langchain_classic.retrievers.document_compressors.cross_encoder_rerank import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_classic.retrievers import ContextualCompressionRetriever
@@ -180,6 +182,127 @@ def reset_retriever_cache():
     except Exception as e:
         pass
 
+initial_message = {"role": "assistant", "content": "What do you want to know about XFEL?"}
+
+HISTORY_FILE = Path(__file__).with_name(".chatxfel_history.json")
+HISTORY_VERSION = 1
+
+def load_conversation_store():
+    default_store = {"version": HISTORY_VERSION, "conversations": []}
+    if not HISTORY_FILE.exists():
+        return default_store
+    try:
+        with HISTORY_FILE.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            return default_store
+        if not isinstance(data.get("conversations"), list):
+            return default_store
+        data.setdefault("version", HISTORY_VERSION)
+        return data
+    except Exception as exc:
+        print(f"Failed to load conversation history: {exc}")
+        return default_store
+
+def save_conversation_store(store):
+    try:
+        with HISTORY_FILE.open("w", encoding="utf-8") as handle:
+            json.dump(store, handle, ensure_ascii=True, indent=2)
+    except Exception as exc:
+        print(f"Failed to save conversation history: {exc}")
+
+def get_conversation(store, convo_id):
+    for convo in store.get("conversations", []):
+        if convo.get("id") == convo_id:
+            return convo
+    return None
+
+def upsert_conversation(store, convo):
+    for idx, existing in enumerate(store.get("conversations", [])):
+        if existing.get("id") == convo.get("id"):
+            store["conversations"][idx] = convo
+            return
+    store["conversations"].append(convo)
+
+def infer_conversation_title(messages, fallback="New chat"):
+    for item in messages:
+        if item.get("role") == "user":
+            content = str(item.get("content", "")).strip()
+            if content:
+                compact = " ".join(content.split())
+                if len(compact) > 40:
+                    compact = compact[:40].rstrip() + "..."
+                return compact
+    return fallback
+
+def make_new_conversation():
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "title": "New chat",
+        "created_at": now,
+        "updated_at": now,
+        "messages": [initial_message],
+    }
+
+def activate_conversation(convo):
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    ss.active_conversation_id = convo.get("id")
+    ss.active_conversation_created_at = convo.get("created_at", now)
+    ss.messages = convo.get("messages", [initial_message])
+
+def persist_current_conversation():
+    if "conversation_store" not in ss or "active_conversation_id" not in ss or "messages" not in ss:
+        return
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    title = infer_conversation_title(ss.messages)
+    created_at = ss.get("active_conversation_created_at", now)
+    convo = {
+        "id": ss.active_conversation_id,
+        "title": title,
+        "created_at": created_at,
+        "updated_at": now,
+        "messages": [dict(item) for item in ss.messages],
+    }
+    upsert_conversation(ss.conversation_store, convo)
+    save_conversation_store(ss.conversation_store)
+
+def delete_conversation(convo_id):
+    store = ss.conversation_store
+    remaining = [item for item in store.get("conversations", []) if item.get("id") != convo_id]
+    store["conversations"] = remaining
+    save_conversation_store(store)
+    if remaining:
+        latest = sorted(remaining, key=lambda item: item.get("updated_at", ""), reverse=True)[0]
+        activate_conversation(latest)
+    else:
+        convo = make_new_conversation()
+        upsert_conversation(store, convo)
+        save_conversation_store(store)
+        activate_conversation(convo)
+
+# Initialize conversation store and active session
+if "conversation_store" not in ss:
+    ss.conversation_store = load_conversation_store()
+
+if "active_conversation_id" not in ss:
+    existing = ss.conversation_store.get("conversations", [])
+    if existing:
+        latest = sorted(existing, key=lambda item: item.get("updated_at", ""), reverse=True)[0]
+        activate_conversation(latest)
+    else:
+        convo = make_new_conversation()
+        upsert_conversation(ss.conversation_store, convo)
+        save_conversation_store(ss.conversation_store)
+        activate_conversation(convo)
+elif "messages" not in ss:
+    convo = get_conversation(ss.conversation_store, ss.active_conversation_id)
+    if convo is None:
+        convo = make_new_conversation()
+        upsert_conversation(ss.conversation_store, convo)
+        save_conversation_store(ss.conversation_store)
+    activate_conversation(convo)
+
 with st.sidebar:
     st.title('ChatXFEL Beta 2.0')
     #st.markdown('[About ChatXFEL](https://confluence.cts.shanghaitech.edu.cn/pages/viewpage.action?pageId=129762874)')
@@ -187,6 +310,42 @@ with st.sidebar:
     #st.write(':red[You have agreed the recording of your IP and access time.]')
     #st.markdown('**IMPORTANT: The answers given by ChatXFEL are for informational purposes only, please consult the references in the source.**')
     st.markdown('**重要提示：大模型的回答仅供参考，点击Sources查看参考文献**')
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Conversations")
+    if st.sidebar.button("New chat", type="primary"):
+        persist_current_conversation()
+        convo = make_new_conversation()
+        upsert_conversation(ss.conversation_store, convo)
+        save_conversation_store(ss.conversation_store)
+        activate_conversation(convo)
+        st.rerun()
+
+    conversations = ss.conversation_store.get("conversations", [])
+    if conversations:
+        sorted_convos = sorted(conversations, key=lambda item: item.get("updated_at", ""), reverse=True)
+        id_map = {item.get("id"): item for item in sorted_convos}
+        convo_ids = [item.get("id") for item in sorted_convos if item.get("id")]
+        if convo_ids:
+            for convo_id in convo_ids:
+                convo = id_map.get(convo_id, {})
+                title = convo.get("title", "New chat")
+                is_active = convo_id == ss.active_conversation_id
+                button_type = "primary" if is_active else "secondary"
+                if st.sidebar.button(title, key=f"conv_{convo_id}", type=button_type):
+                    if not is_active:
+                        persist_current_conversation()
+                        activate_conversation(convo)
+                        st.rerun()
+            active_meta = id_map.get(ss.active_conversation_id)
+            if active_meta and active_meta.get("updated_at"):
+                st.sidebar.caption(f"Last updated {active_meta.get('updated_at')}")
+            delete_disabled = ss.active_conversation_id is None or len(convo_ids) == 0
+            if st.sidebar.button("Delete chat", type="secondary", disabled=delete_disabled):
+                delete_conversation(ss.active_conversation_id)
+                st.rerun()
+    else:
+        st.sidebar.caption("No saved conversations yet.")
 
     # Mode selection: Basic RAG vs Deep Research
     st.sidebar.markdown("---")
@@ -558,11 +717,6 @@ if use_routing:
 #    else:
 #        filters['expr'] = expr_title
 
-initial_message = {"role": "assistant", "content": "What do you want to know about XFEL?"}
-# Store LLM generated responses
-if "messages" not in ss.keys():
-    ss.messages = [initial_message]
-
 # Deep Research state initialization
 if "dr_stage" not in ss:
     ss.dr_stage = "initial"  # initial, clarification, confirmation, searching, review
@@ -643,12 +797,6 @@ for message in ss.messages:
         #            ele[2].button('Dislike', key=f'02{num}')
         #            ele[3].button('Retry', key=f'03{num}')
         #            ele[4].button('Modify', key=f'04{num}')
-
-def clear_chat_history():
-    #ss.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
-    ss.messages = [initial_message]
-
-st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 def stream_markdown(text, placeholder, chars_per_sec):
     if not text:
@@ -737,6 +885,7 @@ if research_mode == "Basic RAG":
         if enable_log:
             question_time = time.strftime('%Y-%m-%d %H:%M:%S')
         ss.messages.append({"role": "user", "content": question})
+        persist_current_conversation()
         with st.chat_message("user"):
             st.write(question)
 
@@ -801,6 +950,7 @@ if research_mode == "Basic RAG":
             logs = {'IP':client_ip, 'Time':question_time, 'Model':selected_model, 'Question': question, 'Answer':full_response, 'Source':source}
             utils.log_rag(logs, use_mongo=use_mongo)
         ss.messages.append(message)
+        persist_current_conversation()
         st.rerun()
 
 # ============================================================
