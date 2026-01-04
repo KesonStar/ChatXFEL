@@ -282,20 +282,56 @@ def delete_conversation(convo_id):
         save_conversation_store(store)
         activate_conversation(convo)
 
+def group_conversations_by_date(conversations):
+    """Group conversations by time periods: Today, Yesterday, Previous 7 days, Older"""
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    week_ago = today_start - timedelta(days=7)
+
+    groups = {
+        "Today": [],
+        "Yesterday": [],
+        "Previous 7 days": [],
+        "Older": []
+    }
+
+    for conv in conversations:
+        updated_str = conv.get("updated_at", "")
+        if not updated_str:
+            groups["Older"].append(conv)
+            continue
+
+        try:
+            # Parse datetime string (format: "YYYY-MM-DD HH:MM:SS")
+            updated_dt = datetime.strptime(updated_str, "%Y-%m-%d %H:%M:%S")
+
+            if updated_dt >= today_start:
+                groups["Today"].append(conv)
+            elif updated_dt >= yesterday_start:
+                groups["Yesterday"].append(conv)
+            elif updated_dt >= week_ago:
+                groups["Previous 7 days"].append(conv)
+            else:
+                groups["Older"].append(conv)
+        except:
+            groups["Older"].append(conv)
+
+    # Remove empty groups
+    return {k: v for k, v in groups.items() if v}
+
 # Initialize conversation store and active session
 if "conversation_store" not in ss:
     ss.conversation_store = load_conversation_store()
 
 if "active_conversation_id" not in ss:
-    existing = ss.conversation_store.get("conversations", [])
-    if existing:
-        latest = sorted(existing, key=lambda item: item.get("updated_at", ""), reverse=True)[0]
-        activate_conversation(latest)
-    else:
-        convo = make_new_conversation()
-        upsert_conversation(ss.conversation_store, convo)
-        save_conversation_store(ss.conversation_store)
-        activate_conversation(convo)
+    # Always start with a new conversation on app startup
+    convo = make_new_conversation()
+    upsert_conversation(ss.conversation_store, convo)
+    save_conversation_store(ss.conversation_store)
+    activate_conversation(convo)
 elif "messages" not in ss:
     convo = get_conversation(ss.conversation_store, ss.active_conversation_id)
     if convo is None:
@@ -335,29 +371,48 @@ with st.sidebar:
 
     conversations = ss.conversation_store.get("conversations", [])
     if conversations:
+        # Sort and group conversations by date
         sorted_convos = sorted(conversations, key=lambda item: item.get("updated_at", ""), reverse=True)
-        id_map = {item.get("id"): item for item in sorted_convos}
-        convo_ids = [item.get("id") for item in sorted_convos if item.get("id")]
-        if convo_ids:
-            for convo_id in convo_ids:
-                convo = id_map.get(convo_id, {})
-                title = convo.get("title", "New chat")
-                is_active = convo_id == ss.active_conversation_id
-                button_type = "primary" if is_active else "secondary"
-                if st.sidebar.button(title, key=f"conv_{convo_id}", type=button_type):
-                    if not is_active:
-                        persist_current_conversation()
-                        activate_conversation(convo)
-                        st.rerun()
-            active_meta = id_map.get(ss.active_conversation_id)
-            if active_meta and active_meta.get("updated_at"):
-                st.sidebar.caption(f"Last updated {active_meta.get('updated_at')}")
-            delete_disabled = ss.active_conversation_id is None or len(convo_ids) == 0
-            if st.sidebar.button("Delete chat", type="secondary", disabled=delete_disabled):
-                delete_conversation(ss.active_conversation_id)
-                st.rerun()
+        grouped = group_conversations_by_date(sorted_convos)
+
+        # Display conversations grouped by time period
+        for group_name, group_convos in grouped.items():
+            with st.sidebar.expander(f"**{group_name}**", expanded=(group_name == "Today")):
+                for convo in group_convos:
+                    convo_id = convo.get("id")
+                    if not convo_id:
+                        continue
+
+                    title = convo.get("title", "New chat")
+                    is_active = convo_id == ss.active_conversation_id
+
+                    # Create a container for each conversation entry
+                    button_label = f"{'💬 ' if is_active else ''}{title}"
+                    button_type = "primary" if is_active else "secondary"
+
+                    col1, col2 = st.columns([0.87, 0.13])
+
+                    with col1:
+                        if st.button(button_label, key=f"conv_{convo_id}",
+                                   type=button_type, use_container_width=True):
+                            if not is_active:
+                                persist_current_conversation()
+                                activate_conversation(convo)
+                                st.rerun()
+
+                    with col2:
+                        # Delete button with simple "×" character
+                        if st.button("×", key=f"del_{convo_id}",
+                                   help="Delete this conversation",
+                                   disabled=is_active):
+                            delete_conversation(convo_id)
+                            st.rerun()
+
+                    # Show timestamp for active conversation
+                    if is_active and convo.get("updated_at"):
+                        st.caption(f"📅 {convo.get('updated_at')}")
     else:
-        st.sidebar.caption("No saved conversations yet.")
+        st.sidebar.info("💭 No saved conversations yet.\nStart chatting to create your first conversation!")
 
     # Mode selection: Basic RAG vs Deep Research
     st.sidebar.markdown("---")
@@ -565,7 +620,7 @@ def get_llm(model_name, num_predict, keep_alive, num_ctx=8192, temperature=0.8):
     llm = rag.get_llm_ollama(model_name=model_name, num_predict=num_predict, 
                              keep_alive=keep_alive, num_ctx=num_ctx, temperature=temperature, base_url='http://10.15.102.186:9000')
     return llm
-llm = get_llm(model_name=selected_model, num_predict=2048, keep_alive=-1)
+llm = get_llm(model_name=selected_model, num_predict=8192, keep_alive=-1)
 
 #You should answer the question in detail as far as possible. Do not make up questions by yourself.
 #If you cannot find anwser in the context, just say that you don't know, don't try to make up an answer.
